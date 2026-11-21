@@ -63,6 +63,23 @@ class MainActivity : Activity() {
     private lateinit var scaleSpinner: Spinner
     private val sliders = mutableMapOf<String, SeekBar>()
 
+    // Onglets et mode Studio
+    private var studioMode = false
+    private lateinit var tabLive: Button
+    private lateinit var tabStudio: Button
+    private lateinit var liveSection: View
+    private lateinit var studioSection: View
+    private lateinit var monitorSwitch: View
+    private lateinit var studioStatus: TextView
+    private lateinit var studioRecBtn: Button
+    private lateinit var studioPlayBtn: Button
+    private lateinit var studioSaveBtn: Button
+    private lateinit var studioSeek: SeekBar
+    private lateinit var studioTime: TextView
+    private lateinit var originalSwitch: Switch
+    private var userSeeking = false
+    private var exporting = false
+
     private val d get() = resources.displayMetrics.density
     private fun dp(v: Int) = (v * d).roundToInt()
 
@@ -76,15 +93,18 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         engine = AudioEngine(getSystemService(AudioManager::class.java))
-        engine.onError = { msg ->
+        engine.onEnded = { err ->
             ui.post {
-                Toast.makeText(this, "Erreur audio : $msg", Toast.LENGTH_LONG).show()
+                if (err != null) Toast.makeText(this, "Erreur audio : $err", Toast.LENGTH_LONG).show()
+                else if (studioMode && engine.take != null && engine.playPos == 0) {
+                    Toast.makeText(this, "Durée maximale atteinte", Toast.LENGTH_SHORT).show()
+                }
                 refreshButtons()
             }
         }
         setContentView(buildUi())
         loadSettings()
-        refreshButtons()
+        setStudioMode(prefs.getBoolean("studio", false))
     }
 
     // ---------------------------------------------------------------- UI
@@ -170,6 +190,23 @@ class MainActivity : Activity() {
         })
         root.addView(label("Correction de la voix en temps réel", 13f, 0x88FFFFFF.toInt()))
 
+        val tabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            background = GradientDrawable().apply { setColor(CARD); cornerRadius = 40f * d }
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(12) }
+        }
+        tabLive = pillButton("🎙  Direct", ACCENT) { setStudioMode(false) }.apply {
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f)
+        }
+        tabStudio = pillButton("🎧  Studio", CARD) { setStudioMode(true) }.apply {
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f)
+        }
+        tabs.addView(tabLive); tabs.addView(tabStudio)
+        root.addView(tabs)
+
         // Affichage : note + graphe
         val display = card()
         val noteRow = LinearLayout(this).apply { gravity = Gravity.BOTTOM }
@@ -206,7 +243,10 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, dp(54), 1f)
         }
         btnRow.addView(startBtn); btnRow.addView(recBtn)
+        liveSection = btnRow
         root.addView(btnRow)
+        studioSection = buildStudio()
+        root.addView(studioSection)
 
         // Tonalité
         val tone = card()
@@ -274,6 +314,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, 0)
         }
         settings.addView(monitor)
+        monitorSwitch = monitor
         val bypass = Switch(this).apply {
             text = "Correction activée"
             setTextColor(0xCCFFFFFF.toInt())
@@ -285,12 +326,206 @@ class MainActivity : Activity() {
         root.addView(settings)
 
         root.addView(label(
-            "🎧 Utilisez un casque filaire pour éviter le larsen. Le Bluetooth ajoute un retard audible.\n" +
+            "Direct : utilisez un casque filaire pour éviter le larsen (le Bluetooth ajoute un retard).\n" +
+                "Studio : pas besoin de casque — chantez, puis réécoutez avec la correction et " +
+                "ajustez les réglages pendant l'écoute.\n" +
                 "Les enregistrements sont sauvegardés dans Musique/VoxTune.",
             12f, 0x77FFFFFF.toInt()
         ).apply { setPadding(dp(4), dp(16), dp(4), 0) })
 
         return scroll
+    }
+
+    private fun buildStudio(): View {
+        val c = card()
+        studioStatus = label("Enregistrez une prise, puis écoutez-la corrigée.", 13f, 0x99FFFFFF.toInt())
+        c.addView(studioStatus)
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(10), 0, 0)
+        }
+        studioRecBtn = pillButton("●  Enregistrer", 0xFFE0303A.toInt()) { studioRecord() }.apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginEnd = dp(10) }
+        }
+        studioPlayBtn = pillButton("▶  Écouter", ACCENT) { studioPlay() }.apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(54), 1f)
+        }
+        row.addView(studioRecBtn); row.addView(studioPlayBtn)
+        c.addView(row)
+
+        val seekRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(10), 0, 0)
+        }
+        studioSeek = SeekBar(this).apply {
+            max = 1000
+            progressTintList = android.content.res.ColorStateList.valueOf(ACCENT)
+            thumbTintList = android.content.res.ColorStateList.valueOf(ACCENT)
+            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar, p: Int, fromUser: Boolean) {
+                    if (fromUser) updateStudioTime(p)
+                }
+                override fun onStartTrackingTouch(s: SeekBar) { userSeeking = true }
+                override fun onStopTrackingTouch(s: SeekBar) {
+                    userSeeking = false
+                    val t = engine.take ?: return
+                    val pos = (t.length.toLong() * s.progress / 1000).toInt()
+                    if (engine.mode == AudioEngine.Mode.PLAYBACK) engine.seekRequest = pos
+                    else pendingSeek = pos
+                }
+            })
+        }
+        studioTime = label("0:00 / 0:00", 12f, 0x99FFFFFF.toInt()).apply { setPadding(dp(8), 0, 0, 0) }
+        seekRow.addView(studioSeek); seekRow.addView(studioTime)
+        c.addView(seekRow)
+
+        originalSwitch = Switch(this).apply {
+            text = "Entendre l'original (sans correction)"
+            setTextColor(0xCCFFFFFF.toInt())
+            setOnCheckedChangeListener { _, v -> engine.playOriginal = v }
+            setPadding(0, dp(8), 0, 0)
+        }
+        c.addView(originalSwitch)
+        c.addView(Switch(this).apply {
+            text = "Lecture en boucle"
+            setTextColor(0xCCFFFFFF.toInt())
+            isChecked = prefs.getBoolean("loop", true)
+            engine.looping = isChecked
+            setOnCheckedChangeListener { _, v ->
+                engine.looping = v; prefs.edit().putBoolean("loop", v).apply()
+            }
+            setPadding(0, dp(8), 0, 0)
+        })
+
+        studioSaveBtn = pillButton("💾  Sauvegarder la version corrigée", 0xFF3A3548.toInt()) { studioExport() }.apply {
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(46)).apply { topMargin = dp(12) }
+        }
+        c.addView(studioSaveBtn)
+        return c
+    }
+
+    private var pendingSeek = -1
+
+    private fun setStudioMode(studio: Boolean) {
+        if (engine.running) {
+            finishRecording()
+            engine.stop()
+        }
+        studioMode = studio
+        prefs.edit().putBoolean("studio", studio).apply()
+        liveSection.visibility = if (studio) View.GONE else View.VISIBLE
+        studioSection.visibility = if (studio) View.VISIBLE else View.GONE
+        monitorSwitch.visibility = if (studio) View.GONE else View.VISIBLE
+        (tabLive.background as GradientDrawable).setColor(if (studio) CARD else ACCENT)
+        (tabStudio.background as GradientDrawable).setColor(if (studio) ACCENT else CARD)
+        refreshButtons()
+    }
+
+    private fun studioRecord() {
+        when (engine.mode) {
+            AudioEngine.Mode.CAPTURE -> {
+                engine.stop()
+                refreshButtons()
+            }
+            else -> {
+                if (!hasMic()) {
+                    pendingAction = { studioRecord() }
+                    requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+                    return
+                }
+                engine.stop()
+                pendingSeek = -1
+                engine.startCapture()
+                refreshButtons()
+            }
+        }
+    }
+
+    private fun studioPlay() {
+        if (engine.mode == AudioEngine.Mode.PLAYBACK) {
+            engine.stop()
+        } else {
+            if (engine.mode == AudioEngine.Mode.CAPTURE) engine.stop()
+            if (!engine.startPlayback()) {
+                Toast.makeText(this, "Enregistrez d'abord une prise.", Toast.LENGTH_SHORT).show()
+            } else if (pendingSeek >= 0) {
+                engine.seekRequest = pendingSeek
+                pendingSeek = -1
+            }
+        }
+        refreshButtons()
+    }
+
+    private fun studioExport() {
+        val take = engine.take
+        if (take == null || take.length == 0 || engine.mode == AudioEngine.Mode.CAPTURE) {
+            Toast.makeText(this, "Enregistrez d'abord une prise.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (exporting) return
+        exporting = true
+        refreshButtons()
+        val settings = fr.mesapplis.voxtune.dsp.AutoTuneProcessor(take.sampleRate)
+            .apply { copySettingsFrom(engine.processor) }
+        Thread {
+            val file = File(cacheDir, "studio_${System.currentTimeMillis()}.wav")
+            try {
+                val w = fr.mesapplis.voxtune.dsp.WavWriter(file, take.sampleRate)
+                take.render(settings, w)
+                w.close()
+                saveToMusic(file)
+            } catch (t: Throwable) {
+                file.delete()
+                ui.post { Toast.makeText(this, "Échec de l'export", Toast.LENGTH_LONG).show() }
+            }
+            ui.post { exporting = false; refreshButtons() }
+        }.start()
+    }
+
+    private fun fmtTime(samples: Long, sr: Int): String {
+        val sec = (samples / sr).toInt()
+        return "%d:%02d".format(sec / 60, sec % 60)
+    }
+
+    private fun updateStudioTime(progress: Int) {
+        val t = engine.take
+        if (t == null) { studioTime.text = "0:00 / 0:00"; return }
+        val pos = t.length.toLong() * progress / 1000
+        studioTime.text = fmtTime(pos, t.sampleRate) + " / " + fmtTime(t.length.toLong(), t.sampleRate)
+    }
+
+    private fun updateStudio() {
+        val t = engine.take
+        when (engine.mode) {
+            AudioEngine.Mode.CAPTURE -> {
+                val len = t?.length?.toLong() ?: 0L
+                val blink = (System.currentTimeMillis() / 500) % 2 == 0L
+                studioStatus.text = (if (blink) "● " else "   ") + "Enregistrement… " +
+                    fmtTime(len, engine.sampleRate) + "  (max ${engine.maxTakeSeconds / 60} min)"
+                studioStatus.setTextColor(0xFFFF6B73.toInt())
+                studioTime.text = fmtTime(len, engine.sampleRate)
+                studioSeek.progress = 0
+            }
+            else -> {
+                studioStatus.setTextColor(0x99FFFFFF.toInt())
+                studioStatus.text = when {
+                    t == null || t.length == 0 -> "Enregistrez une prise, puis écoutez-la corrigée."
+                    engine.mode == AudioEngine.Mode.PLAYBACK ->
+                        "Lecture — modifiez les réglages, l'effet change en direct."
+                    else -> "Prise de " + fmtTime(t.length.toLong(), t.sampleRate) + " prête."
+                }
+                if (t != null && t.length > 0 && !userSeeking) {
+                    val pos = if (engine.mode == AudioEngine.Mode.PLAYBACK) engine.playPos
+                    else if (pendingSeek >= 0) pendingSeek else engine.playPos
+                    studioSeek.progress = (pos.toLong() * 1000 / t.length).toInt()
+                    updateStudioTime(studioSeek.progress)
+                }
+            }
+        }
     }
 
     private fun loadSettings() {
@@ -316,27 +551,41 @@ class MainActivity : Activity() {
             noteText.setTextColor(Color.WHITE)
         } else {
             noteText.setTextColor(0x55FFFFFF)
-            infoText.text = if (engine.running) "Chantez…" else ""
+            infoText.text = when (engine.mode) {
+                AudioEngine.Mode.LIVE, AudioEngine.Mode.CAPTURE -> "Chantez…"
+                else -> ""
+            }
         }
         val lp = levelBar.layoutParams
         lp.width = ((graph.width) * p.inputLevel.coerceIn(0f, 1f)).roundToInt()
         levelBar.layoutParams = lp
         graph.push(det, p.outputMidi)
 
+        if (studioMode) updateStudio()
         if (engine.isRecording) {
             recBtn.alpha = if ((System.currentTimeMillis() / 500) % 2 == 0L) 1f else 0.6f
         }
     }
 
     private fun refreshButtons() {
-        val on = engine.running
+        if (::studioRecBtn.isInitialized) {
+            val capturing = engine.mode == AudioEngine.Mode.CAPTURE
+            val playing = engine.mode == AudioEngine.Mode.PLAYBACK
+            studioRecBtn.text = if (capturing) "■  Stop" else if (engine.take != null) "●  Refaire" else "●  Enregistrer"
+            studioPlayBtn.text = if (playing) "❚❚  Pause" else "▶  Écouter"
+            studioPlayBtn.isEnabled = !capturing
+            studioPlayBtn.alpha = if (capturing) 0.4f else 1f
+            studioSaveBtn.text = if (exporting) "Export en cours…" else "💾  Sauvegarder la version corrigée"
+            studioSaveBtn.isEnabled = !exporting
+        }
+        val on = engine.mode == AudioEngine.Mode.LIVE
         startBtn.text = if (on) "■  Arrêter" else "▶  Démarrer"
         (startBtn.background as GradientDrawable).setColor(if (on) 0xFF5A5470.toInt() else ACCENT)
         val rec = engine.isRecording
         recBtn.text = if (rec) "■  Stop" else "●  Enregistrer"
         recBtn.alpha = 1f
         (recBtn.background as GradientDrawable).setColor(if (rec) 0xFFE0303A.toInt() else 0xFF3A3548.toInt())
-        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (engine.running) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
@@ -344,14 +593,17 @@ class MainActivity : Activity() {
 
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
+    private var pendingAction: (() -> Unit)? = null
+
     private fun toggleEngine() {
-        if (engine.running) {
+        if (engine.mode == AudioEngine.Mode.LIVE) {
             finishRecording()
             engine.stop()
             refreshButtons()
             return
         }
         if (!hasMic()) {
+            pendingAction = { toggleEngine() }
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
             return
         }
@@ -369,7 +621,7 @@ class MainActivity : Activity() {
     }
 
     private fun startEngine() {
-        engine.start()
+        engine.startLive()
         refreshButtons()
     }
 
@@ -389,7 +641,9 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, perms, results)
         if (code == REQ_MIC) {
-            if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) toggleEngine()
+            val action = pendingAction
+            pendingAction = null
+            if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) action?.invoke()
             else Toast.makeText(this, "L'accès au micro est nécessaire.", Toast.LENGTH_LONG).show()
         }
     }
@@ -400,9 +654,9 @@ class MainActivity : Activity() {
             refreshButtons()
             return
         }
-        if (!engine.running) {
+        if (engine.mode != AudioEngine.Mode.LIVE) {
             toggleEngine()
-            if (!engine.running) return
+            if (engine.mode != AudioEngine.Mode.LIVE) return
         }
         val file = File(cacheDir, "rec_${System.currentTimeMillis()}.wav")
         engine.startRecording(file)
@@ -413,34 +667,37 @@ class MainActivity : Activity() {
         val w = engine.stopRecording() ?: return
         val src = w.file
         if (w.durationSeconds < 0.3f) { src.delete(); return }
-        Thread {
-            val name = "VoxTune_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.FRANCE).format(Date()) + ".wav"
-            val ok = try {
-                val values = ContentValues().apply {
-                    put(MediaStore.Audio.Media.DISPLAY_NAME, name)
-                    put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
-                    put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/VoxTune")
-                    put(MediaStore.Audio.Media.IS_PENDING, 1)
-                }
-                val uri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)!!
-                contentResolver.openOutputStream(uri)!!.use { out -> src.inputStream().use { it.copyTo(out) } }
-                values.clear()
-                values.put(MediaStore.Audio.Media.IS_PENDING, 0)
-                contentResolver.update(uri, values, null, null)
-                true
-            } catch (t: Throwable) {
-                false
-            } finally {
-                src.delete()
+        Thread { saveToMusic(src) }.start()
+    }
+
+    /** Copie un WAV dans Musique/VoxTune (MediaStore) puis supprime la source. Thread d'arrière-plan. */
+    private fun saveToMusic(src: File) {
+        val name = "VoxTune_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.FRANCE).format(Date()) + ".wav"
+        val ok = try {
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, name)
+                put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
+                put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/VoxTune")
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
-            ui.post {
-                Toast.makeText(
-                    this,
-                    if (ok) "Enregistré : Musique/VoxTune/$name" else "Échec de la sauvegarde",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }.start()
+            val uri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)!!
+            contentResolver.openOutputStream(uri)!!.use { out -> src.inputStream().use { it.copyTo(out) } }
+            values.clear()
+            values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+            contentResolver.update(uri, values, null, null)
+            true
+        } catch (t: Throwable) {
+            false
+        } finally {
+            src.delete()
+        }
+        ui.post {
+            Toast.makeText(
+                this,
+                if (ok) "Enregistré : Musique/VoxTune/$name" else "Échec de la sauvegarde",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     override fun onResume() {

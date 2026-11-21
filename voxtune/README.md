@@ -9,7 +9,13 @@ Chantez dans le micro, entendez votre voix corrigée en direct dans le casque.
 - **Intensité**, **transposition** (±12 demi-tons), gain micro, volume
 - **Préréglages** : Robot, Pop, Naturel
 - **Graphe en direct** : votre voix (gris) et la voix corrigée (rose) sur la grille de la gamme
-- **Enregistrement** en WAV dans `Musique/VoxTune`
+- **Deux modes** :
+  - 🎙 **Direct** : on entend sa voix corrigée en temps réel dans le casque (+ enregistrement WAV)
+  - 🎧 **Studio** : on enregistre d'abord sa voix brute (pas de casque nécessaire), puis on la réécoute
+    corrigée. Les réglages (tonalité, vitesse, intensité…) changent l'effet **pendant l'écoute**,
+    on peut comparer avec l'original, se déplacer dans la prise, écouter en boucle, puis exporter
+    la version corrigée (prise de 3 min max)
+- Les fichiers sont sauvegardés en WAV dans `Musique/VoxTune`
 
 ## Installation
 1. Téléchargez `VoxTune.apk` (onglet **Releases** du dépôt, ou artefact de l'action GitHub « VoxTune APK »).
@@ -29,6 +35,7 @@ cd voxtune
 - `dsp/PitchDetector.kt` — détection de la fondamentale (YIN)
 - `dsp/PitchShifter.kt` — transposition par ligne à retard à deux têtes, synchronisée sur la période de la voix
 - `dsp/Music.kt` — notes, gammes, quantification avec hystérésis
+- `dsp/Take.kt` — prise en mémoire et rendu hors-ligne (mode Studio)
 - `dsp/AutoTuneProcessor.kt` — chaîne complète (indépendante d'Android, testée en JVM)
 - `AudioEngine.kt` — boucle micro → traitement → casque (AudioRecord/AudioTrack basse latence)
 - `MainActivity.kt`, `PitchGraphView.kt` — interface

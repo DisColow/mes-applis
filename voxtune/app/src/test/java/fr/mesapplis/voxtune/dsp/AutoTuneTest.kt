@@ -70,3 +70,32 @@ class AutoTuneTest {
         assertEquals(440.0, outHz.toDouble(), 3.0)
     }
 }
+
+class TakeTest {
+    @Test
+    fun appendAndReadAcrossChunks() {
+        val t = Take(100)
+        val src = FloatArray(73) { it.toFloat() }
+        repeat(5) { t.append(src, src.size) }
+        assertEquals(365, t.length)
+        val dst = FloatArray(50)
+        assertEquals(50, t.read(90, dst, 50))
+        for (i in 0 until 50) assertEquals(((90 + i) % 73).toFloat(), dst[i], 0f)
+        assertEquals(15, t.read(350, dst, 50))
+        assertEquals(0, t.read(365, dst, 50))
+    }
+
+    @Test
+    fun renderWritesWholeTake() {
+        val sr = 48000
+        val t = Take(sr)
+        val x = FloatArray(sr) { (0.3 * kotlin.math.sin(2 * Math.PI * 226 * it / sr)).toFloat() }
+        t.append(x, x.size)
+        val f = java.io.File.createTempFile("voxtune", ".wav")
+        val w = WavWriter(f, sr)
+        t.render(AutoTuneProcessor(sr).apply { scale = Scale.MAJOR; retuneMs = 0f }, w)
+        w.close()
+        assertEquals(44L + sr * 2, f.length())
+        f.delete()
+    }
+}

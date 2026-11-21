@@ -47,6 +47,11 @@ class AutoTuneProcessor(private val sampleRate: Int) {
     private var currentRatio = 1f
     private var unvoicedSamples = 0
 
+    fun copySettingsFrom(o: AutoTuneProcessor) {
+        key = o.key; scale = o.scale; retuneMs = o.retuneMs; amount = o.amount
+        transpose = o.transpose; inputGain = o.inputGain; outputGain = o.outputGain; enabled = o.enabled
+    }
+
     fun reset() {
         shifter.reset()
         anaRing.fill(0f)
