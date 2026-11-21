@@ -1,0 +1,54 @@
+name: MicBoard Windows
+
+# Compile MicBoard.exe à chaque modification de l'appli (ou à la demande depuis l'onglet Actions),
+# puis le publie en artefact et dans une release GitHub téléchargeable.
+on:
+  push:
+    paths: ["micboard/**", ".github/workflows/micboard-windows.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: micboard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: micboard
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Dépendances
+        run: pip install -r requirements.txt pytest pyinstaller
+
+      - name: Tests
+        run: python -m pytest -q tests
+
+      - name: Compilation de l'exe
+        run: pyinstaller --noconfirm --onefile --windowed --name MicBoard main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MicBoard-exe
+          path: micboard/dist/MicBoard.exe
+
+      - name: Publier une release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: micboard-build-${{ github.run_number }}
+          name: MicBoard (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          body: |
+            Télécharge **MicBoard.exe** et lance-le (Windows 10/11, rien d'autre à installer
+            à part VB-Audio Virtual Cable : https://vb-audio.com/Cable/).
+            Compilé depuis `${{ github.ref_name }}` @ ${{ github.sha }}.
+          files: micboard/dist/MicBoard.exe
