@@ -8,23 +8,83 @@ Il est prévu pour les sons de **Wolfenstein: Enemy Territory**, des **ouvriers 
 > Les sons des jeux appartiennent à leurs éditeurs : ils ne sont **pas** fournis avec l'appli.
 > MicBoard les copie depuis **tes propres jeux installés** (*Importer depuis mes jeux*).
 
-## Installation
+## Comment ça marche (à lire en premier)
 
-1. Installe **VB-Audio Virtual Cable** (gratuit) : <https://vb-audio.com/Cable/>, puis redémarre le PC.
-   Il ajoute une sortie « CABLE Input » et un micro « CABLE Output ».
-2. Télécharge **MicBoard.exe** depuis les *Releases* du dépôt (compilé automatiquement par
-   GitHub Actions) et lance-le.
+Windows ne laisse pas une appli parler à la place de ton micro. L'astuce, c'est un **câble virtuel** :
+un faux micro gratuit (VB-Audio Virtual Cable). MicBoard y envoie ta voix **et** les sons, et Discord
+ou ton jeu écoute ce faux micro au lieu du vrai.
 
-## Utilisation
+```
+Ton micro ──► MicBoard (+ les sons) ──► CABLE Input ═══ câble virtuel ═══► CABLE Output ──► Discord / jeu
+```
 
-1. Ouvre **Réglages** (en bas à gauche) et choisis :
-   - **Mon vrai micro** : ta voix passe toujours, mélangée aux sons ;
-   - **Sortie vers le câble** : `CABLE Input` ;
-   - **Retour casque** : ton casque, pour entendre les sons toi aussi et pour la pré-écoute.
-2. Clique sur **Micro hors ligne** (en haut à gauche) : il passe à **En direct**.
-3. Dans Discord / le jeu / OBS, choisis **CABLE Output** comme micro.
+**La seule chose à retenir :** MicBoard envoie dans **CABLE Input**, et Discord ou ton jeu écoute
+**CABLE Output**. Les deux noms se ressemblent : c'est l'entrée et la sortie du même câble.
 
-Le bouton micro du lecteur (en bas) coupe ou rétablit ta voix ; son vumètre montre qu'elle passe.
+## Démarrage pas à pas
+
+Au premier lancement, MicBoard ouvre un **assistant** qui refait ces étapes avec toi et vérifie
+chacune : câble détecté, voix qui arrive, son de test envoyé. On le relance depuis **Aide ›
+Relancer l'assistant**.
+
+### 1. Installer le câble virtuel (une seule fois)
+
+1. Va sur <https://vb-audio.com/Cable/> et télécharge **VBCABLE_Driver_Pack** (gratuit).
+2. Clic droit sur le `.zip` téléchargé › **Extraire tout…**
+3. Dans le dossier extrait, clic droit sur `VBCABLE_Setup_x64.exe` › **Exécuter en tant
+   qu'administrateur**, puis **Install Driver**.
+4. **Redémarre le PC.**
+
+### 2. Télécharger et lancer MicBoard
+
+1. Sur la page du dépôt GitHub, ouvre **Releases** (colonne de droite), prends la plus récente
+   « MicBoard (build …) » et clique sur **MicBoard.exe** dans *Assets*.
+2. Lance-le. Si Windows affiche « Windows a protégé votre ordinateur » : clique sur
+   **Informations complémentaires**, puis **Exécuter quand même** (MicBoard n'est pas signé
+   numériquement, d'où l'avertissement).
+
+### 3. Choisir tes appareils
+
+L'assistant les choisit pour toi ; vérifie-les (ou plus tard dans **Réglages**, en bas à gauche) :
+- **Ton vrai micro** : celui dans lequel tu parles. *Pas* « CABLE Output ».
+- **Sortie vers le câble** : toujours **CABLE Input**.
+- **Ton casque** (facultatif) : pour entendre les sons toi aussi et les pré-écouter.
+
+### 4. Activer et tester
+
+Clique sur **Micro hors ligne** en haut à gauche : il passe à **En direct**. Parle : la barre du
+bouton micro (en bas) doit bouger. L'étape *Tester* de l'assistant envoie aussi un son de test.
+
+### 5. Régler Discord ou ton jeu
+
+- **Discord** : Paramètres utilisateur › **Voix et vidéo** › Périphérique d'entrée = **CABLE Output
+  (VB-Audio Virtual Cable)**. Désactive la **suppression du bruit** (Krisp), sinon Discord coupe les
+  sons. En Push-to-talk, les sons ne passent que pendant que tu appuies sur ta touche.
+- **Jeux** (Counter-Strike: Source…) : ils utilisent le micro par défaut de Windows. Panneau Son
+  de Windows › onglet **Enregistrement** › clic droit sur **CABLE Output** › *Définir en tant que
+  périphérique par défaut* (l'assistant a un bouton qui ouvre ce panneau). MicBoard continue
+  d'écouter ton vrai micro.
+- **OBS** : Sources › + › *Capture audio d'entrée* › **CABLE Output**, et retire ton micro habituel.
+
+### 6. Ajouter des sons
+
+*Importer depuis mes jeux*, *Importer un dossier* ou *Chercher sur mon PC* (détails plus bas).
+Ensuite : un clic sur un son le joue dans le micro, **Échap** arrête tout.
+
+## Dépannage
+
+| Problème | Solution |
+|---|---|
+| Les autres n'entendent rien | Le bouton en haut à gauche doit afficher **En direct** ; Discord/le jeu doit utiliser **CABLE Output** ; désactive la suppression du bruit de Discord ; en Push-to-talk, appuie sur ta touche. |
+| Ils entendent les sons mais pas ma voix | Réglages › **Mon vrai micro** = ton micro ; le bouton micro en bas ne doit pas être barré. |
+| Je n'entends pas les sons | Réglages › **Retour casque** = ton casque, et monte le curseur casque. |
+| « CABLE Input » n'apparaît pas | Installe VB-Cable puis **redémarre le PC** ; dans l'assistant, « J'ai installé le câble : vérifier ». |
+| Son haché, appareil qui refuse de s'ouvrir | Réglages › **Pilote audio** = MME. |
+| Raccourcis inactifs en jeu | Si le jeu tourne en administrateur, lance MicBoard en administrateur aussi. |
+
+## Utilisation au quotidien
+
+Le bouton micro du lecteur (en bas) coupe ou rétablit ta voix ; sa barre montre qu'elle passe.
 Les curseurs règlent séparément le volume des sons, de ta voix et du casque.
 
 ### Naviguer dans les dossiers

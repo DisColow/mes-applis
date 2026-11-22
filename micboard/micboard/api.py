@@ -486,11 +486,56 @@ class Api:
             self.rescan()
         return self.devices()
 
+    # --- assistant de configuration ------------------------------------------------------
     def first_run(self) -> bool:
-        first = not self._cfg.get("help_shown")
-        self._cfg["help_shown"] = True
+        """Vrai tant que l'assistant de configuration n'a jamais été terminé."""
+        return not self._cfg.get("setup_done")
+
+    def setup_done(self, done: bool = True) -> None:
+        self._cfg["setup_done"] = bool(done)
         self._save()
-        return first
+
+    def setup_status(self, refresh: bool = False) -> dict:
+        """État de chaque étape, pour les coches de l'assistant."""
+        if refresh and not self._engine.running:
+            try:
+                self._engine.close_preview()
+                AudioEngine.refresh_devices()
+            except Exception:
+                pass
+        dev = self.devices()
+        sel = dev.get("selected", {})
+        return {"cable_found": dev.get("cable_found", False), "mic": sel.get("mic", ""),
+                "cable": sel.get("cable", ""), "monitor": sel.get("monitor", ""),
+                "cable_ok": "cable" in sel.get("cable", "").lower(),
+                "running": self._engine.running, "sounds": len(self._index.entries),
+                "setup_done": bool(self._cfg.get("setup_done")), "error": dev.get("error", "")}
+
+    def play_test(self) -> dict:
+        """Petit carillon de test (deux notes), envoyé dans le micro et le casque."""
+        if not self._engine.running:
+            return {"ok": False, "error": "Active d'abord le micro."}
+        import numpy as np
+        from .audio import SAMPLE_RATE
+        t = np.arange(int(0.22 * SAMPLE_RATE)) / SAMPLE_RATE
+        env = np.minimum(1, t * 80) * np.exp(-t * 9)
+        notes = [np.sin(2 * np.pi * f * t) * env for f in (660, 880)]
+        gap = np.zeros(int(0.03 * SAMPLE_RATE))
+        tone = np.concatenate([notes[0], gap, notes[1], gap, notes[1] * 0.6]).astype(np.float32) * 0.6
+        self._mixer.play(tone, tag="__test__")
+        return {"ok": True}
+
+    def open_url(self, which: str) -> None:
+        """Ouvre une page connue dans le navigateur (liste fermée : pas d'adresse venant de la page)."""
+        import webbrowser
+        urls = {"vbcable": "https://vb-audio.com/Cable/"}
+        if which in urls:
+            webbrowser.open(urls[which])
+
+    def open_sound_settings(self) -> None:
+        """Ouvre le panneau Son de Windows, onglet Enregistrement (micro par défaut)."""
+        if sys.platform == "win32":
+            subprocess.Popen(["control", "mmsys.cpl,,1"])
 
     def shutdown(self) -> None:
         self.disk_cancel()

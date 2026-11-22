@@ -192,6 +192,14 @@ class AudioEngine:
         self.running = False
 
     @staticmethod
+    def refresh_devices() -> None:
+        """Relit la liste des périphériques (PortAudio la garde en mémoire depuis le lancement) :
+        utile juste après l'installation de VB-Cable. À n'appeler que moteur arrêté."""
+        import sounddevice as sd
+        sd._terminate()
+        sd._initialize()
+
+    @staticmethod
     def host_apis() -> list[str]:
         import sounddevice as sd
         return [api["name"] for api in sd.query_hostapis()]

@@ -189,3 +189,18 @@ def test_api_tree_browse_and_folder_import(tmp_path, monkeypatch):
     assert [f["name"] for f in pack["folders"]] == ["Armes"] and [f["name"] for f in pack["files"]] == ["Intro"]
     assert a.browse("Mes sons/Pack/Armes/Fusils")["files"][0]["name"] == "Pan"
     assert "error" in a.import_folder_path(str(src), "../..")  # pas de sortie de la bibliothèque
+
+
+def test_setup_wizard_api(tmp_path, monkeypatch):
+    a, _root = make_api(tmp_path, monkeypatch)
+    assert a.first_run() is True
+    st = a.setup_status()
+    assert st["cable_found"] and st["cable_ok"] and st["mic"] == "Micro" and not st["running"]
+    assert not a.play_test()["ok"]  # moteur arrêté
+    a.start()
+    a._mixer.add_sink(SINK_CABLE)
+    assert a.play_test()["ok"]
+    assert a.status()["playing"][0]["tag"] == "__test__"
+    a.setup_done(True)
+    assert a.first_run() is False
+    assert apimod.Api(engine=FakeEngine(), cfg_file=tmp_path / "cfg.json").first_run() is False

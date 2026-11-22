@@ -33,7 +33,8 @@ async function init() {
   applyMix(dev);
   await load();
   setInterval(pollStatus, 110);
-  if (await api.first_run()) openHelp();
+  updateBanner();
+  if (await api.first_run()) openWizard();
 }
 if (window.pywebview && window.pywebview.api) init();
 else window.addEventListener("pywebviewready", init, { once: true });
@@ -399,6 +400,7 @@ async function pollStatus() {
   let st;
   try { st = await api.status(); } catch { return; }
   setLive(st.running);
+  wizardTick(st);
   if (st.message) toast(st.message, "err");
   const vu = $("#vu-mic");
   vu.style.width = `${Math.min(100, Math.sqrt(st.mic_level) * 100)}%`;
@@ -478,6 +480,7 @@ document.addEventListener("click", async (e) => {
   const act = a.dataset.action;
   if (act === "settings") openSettings();
   else if (act === "help") openHelp();
+  else if (act === "wizard") openWizard();
   else if (act === "import") openImport();
   else if (act === "close") closeModal();
   else if (act === "stop") api.stop();
@@ -528,11 +531,13 @@ function toast(msg, kind = "") {
 function openModal(html, narrow = false) {
   $("#modal-body").innerHTML = html;
   $(".modal-card").classList.toggle("narrow", narrow);
+  $(".modal-card").classList.remove("wide");
   $("#modal").hidden = false;
 }
 function closeModal() {
   $("#modal").hidden = true;
   hotkeyCapture = null;
+  W.open = false;
 }
 
 const GAMES = [
@@ -668,24 +673,250 @@ document.addEventListener("keydown", (e) => {
   $("#hk-save").disabled = combo.every((c) => ["ctrl", "alt", "shift", "windows"].includes(c));
 }, true);
 
+/* ------------------------------------------------------------------ assistant de configuration */
+const W = { open: false, step: 0, st: {}, heardVoice: false, sentTest: false, tab: "discord" };
+const WSTEPS = ["Le principe", "Câble virtuel", "Appareils", "Tester", "Discord / jeu", "Sons"];
+
+/** Schéma du trajet du son, réutilisé dans l'assistant et l'aide. */
+function chainHTML() {
+  const box = (ic, t, s, cls = "") => `<div class="node ${cls}"><span class="node-ic">${icon(ic)}</span><b>${t}</b><small>${s}</small></div>`;
+  const arrow = (label = "") => `<div class="arrow"><span></span>${label ? `<em>${label}</em>` : ""}</div>`;
+  return `<div class="chain">
+    ${box("mic", "Ton micro", "ta voix")}
+    ${arrow()}
+    ${box("logo", "MicBoard", "+ les sons", "mb")}
+    ${arrow("envoie dans")}
+    ${box("headphones", "CABLE Input", "entrée du câble", "cable")}
+    ${arrow("câble virtuel")}
+    ${box("mic", "CABLE Output", "sortie du câble", "cable")}
+    ${arrow("écouté par")}
+    ${box("helmet", "Discord, jeu…", "les autres t'entendent")}
+  </div>`;
+}
+
+async function openWizard(step = 0) {
+  W.open = true;
+  W.step = step;
+  W.st = await api.setup_status(false);
+  renderWizard();
+}
+function check(ok) { return `<span class="ck ${ok ? "on" : ""}">${ok ? "✓" : ""}</span>`; }
+
+async function renderWizard() {
+  const st = W.st;
+  const done = [true, st.cable_found, st.cable_ok && !!st.mic, W.heardVoice && W.sentTest, false, st.sounds > 0];
+  const steps = WSTEPS.map((t, i) => `<button class="wz-step ${i === W.step ? "cur" : ""} ${done[i] && i ? "done" : ""}" data-wz="${i}" type="button">
+      <span class="n">${done[i] && i ? "✓" : i + 1}</span><span>${t}</span></button>`).join("");
+  let body = "";
+  if (W.step === 0) body = `
+    <h2>Comment ça marche</h2>
+    <p class="muted">Windows ne laisse pas une appli parler à la place de ton micro. L'astuce : un <b>câble virtuel</b>,
+      un faux micro gratuit. MicBoard y envoie ta voix <b>et</b> les sons, et Discord ou ton jeu écoute ce faux micro.</p>
+    ${chainHTML()}
+    <div class="tip">${icon("help")}<div><b>La seule chose à retenir :</b> MicBoard envoie dans <code>CABLE Input</code>,
+      et Discord ou ton jeu écoute <code>CABLE Output</code>. Les deux noms se ressemblent, c'est normal :
+      c'est l'entrée et la sortie du même câble.</div></div>
+    <p class="muted">L'assistant prend 2 minutes et vérifie chaque étape pour toi.</p>`;
+  else if (W.step === 1) body = `
+    <h2>Installer le câble virtuel</h2>
+    <div class="status ${st.cable_found ? "ok" : "ko"}">${st.cable_found
+      ? `${check(true)}<b>Câble virtuel détecté.</b> Tu peux passer à la suite.`
+      : `${check(false)}<b>Câble virtuel pas encore installé.</b> Suis les 4 étapes ci-dessous.`}</div>
+    <ol class="howto">
+      <li><button class="secondary small" data-wact="vbcable" type="button">${icon("download")}Ouvrir la page de VB-Cable</button>
+        et télécharge <b>VBCABLE_Driver_Pack</b> (gros bouton « Download », c'est gratuit).</li>
+      <li>Dans tes Téléchargements, fais un clic droit sur le fichier <code>.zip</code> › <b>Extraire tout…</b></li>
+      <li>Dans le dossier extrait, clic droit sur <code>VBCABLE_Setup_x64.exe</code> › <b>Exécuter en tant qu'administrateur</b>,
+        puis clique sur <b>Install Driver</b>.</li>
+      <li><b>Redémarre le PC</b>, rouvre MicBoard et reviens ici.</li>
+    </ol>
+    <button class="secondary" data-wact="recheck" type="button">${icon("search")}J'ai installé le câble : vérifier</button>`;
+  else if (W.step === 2) {
+    const d = await api.devices();
+    const opts = (list, sel, none) => (none ? `<option value="">${none}</option>` : "") +
+      list.map((n) => `<option ${n === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
+    body = `
+    <h2>Choisir tes appareils</h2>
+    <p class="muted">MicBoard a choisi pour toi. Vérifie juste que ça correspond.</p>
+    <div class="pick">
+      <div><span class="pick-ic">${icon("mic")}</span><div><b>Ton vrai micro</b><small>Celui dans lequel tu parles (casque-micro, micro USB…). <u>Pas</u> « CABLE Output ».</small></div></div>
+      <select data-dev="mic">${opts(d.inputs || [], d.selected?.mic, "(aucun : seulement les sons)")}</select>
+      <div><span class="pick-ic cable">${icon("logo")}</span><div><b>Sortie vers le câble</b><small>Toujours <b>CABLE Input</b>.</small></div></div>
+      <select data-dev="cable" class="${st.cable_ok ? "" : "bad"}">${opts(d.outputs || [], d.selected?.cable)}</select>
+      <div><span class="pick-ic">${icon("headphones")}</span><div><b>Ton casque</b><small>Pour entendre les sons toi aussi. Facultatif.</small></div></div>
+      <select data-dev="monitor">${opts(d.outputs || [], d.selected?.monitor, "(aucun)")}</select>
+    </div>
+    ${st.cable_ok ? "" : `<div class="warn">${icon("help")}<div>Choisis <b>CABLE Input</b> comme sortie. S'il n'est pas dans la liste, reviens à l'étape 2.</div></div>`}`;
+  } else if (W.step === 3) body = `
+    <h2>Tester</h2>
+    <p class="muted">On vérifie que tout passe bien dans le câble, avant d'aller dans Discord.</p>
+    <div class="test-row">
+      <span class="tn">1</span>
+      <div class="grow"><b>Active MicBoard</b><small>${S.running ? "C'est actif : le bouton en haut à gauche affiche « En direct »." : "Le même bouton qu'en haut à gauche, « Micro hors ligne »."}</small></div>
+      <button class="${S.running ? "secondary" : "primary"}" data-wact="toggle" type="button">${S.running ? "Désactiver" : "Activer"}</button>
+    </div>
+    <div class="test-row ${S.running ? "" : "dim"}">
+      <span class="tn">2</span>
+      <div class="grow"><b>Parle dans ton micro</b><small>La barre doit bouger quand tu parles.</small>
+        <span class="vu big"><i id="wz-vu-mic"></i></span></div>
+      ${check(W.heardVoice)}
+    </div>
+    <div class="test-row ${S.running ? "" : "dim"}">
+      <span class="tn">3</span>
+      <div class="grow"><b>Envoie un son de test</b><small>${st.monitor ? "Tu dois l'entendre dans ton casque." : "Choisis un casque à l'étape 3 pour l'entendre toi aussi."} La barre montre ce que les autres recevront.</small>
+        <span class="vu big"><i id="wz-vu-out"></i></span></div>
+      <button class="secondary" data-wact="test" type="button" ${S.running ? "" : "disabled"}>${icon("play")}Son de test</button>
+      ${check(W.sentTest)}
+    </div>
+    <p class="muted small-note">La barre ne bouge pas quand tu parles ? Vérifie « Ton vrai micro » à l'étape 3, et que le bouton micro en bas de MicBoard n'est pas barré.</p>`;
+  else if (W.step === 4) {
+    const tabs = { discord: "Discord", games: "Jeux (CS:S, ET…)", obs: "OBS" };
+    const content = {
+      discord: `<ol class="howto">
+        <li>Dans Discord, ouvre <b>Paramètres utilisateur</b> (roue dentée en bas) › <b>Voix et vidéo</b>.</li>
+        <li><b>Périphérique d'entrée</b> : choisis <code>CABLE Output (VB-Audio Virtual Cable)</code>.</li>
+        <li>Désactive la <b>suppression du bruit</b> (Krisp) : sinon Discord coupe les sons, qu'il prend pour du bruit.</li>
+        <li>Clique sur <b>Vérifions</b> et joue un son dans MicBoard : tu dois l'entendre.</li>
+      </ol>
+      <div class="tip">${icon("key")}<div>En <b>Push-to-talk</b>, les sons ne passent que pendant que tu appuies sur ta touche.
+        En <b>détection de la voix</b>, baisse un peu la sensibilité si les sons calmes sont coupés.</div></div>`,
+      games: `<p class="muted">La plupart des jeux utilisent le <b>micro par défaut de Windows</b>. Il faut donc que ce soit le câble.</p>
+      <ol class="howto">
+        <li><button class="secondary small" data-wact="sound" type="button">${icon("gear")}Ouvrir les réglages de son de Windows</button></li>
+        <li>Onglet <b>Enregistrement</b> : clic droit sur <code>CABLE Output</code> › <b>Définir en tant que périphérique par défaut</b>.</li>
+        <li>Lance le jeu et active son chat vocal. Dans Counter-Strike: Source : Options › Voix.</li>
+      </ol>
+      <div class="tip">${icon("help")}<div>Ça ne gêne pas MicBoard : il écoute toujours ton vrai micro, choisi à l'étape 3.
+        Pour revenir comme avant, remets ton vrai micro par défaut au même endroit.</div></div>`,
+      obs: `<ol class="howto">
+        <li>Dans OBS, <b>Sources</b> › <b>+</b> › <b>Capture audio d'entrée</b>.</li>
+        <li>Périphérique : <code>CABLE Output (VB-Audio Virtual Cable)</code>.</li>
+        <li>Retire ton micro habituel des sources, sinon ta voix sera en double.</li>
+      </ol>`,
+    };
+    body = `<h2>Régler Discord ou ton jeu</h2>
+      <p class="muted">Dernière étape technique : dire à ton appli d'écouter <code>CABLE Output</code> au lieu de ton micro.</p>
+      <div class="tabs">${Object.entries(tabs).map(([k, t]) => `<button class="${W.tab === k ? "on" : ""}" data-wtab="${k}" type="button">${t}</button>`).join("")}</div>
+      ${content[W.tab]}`;
+  } else if (W.step === 5) body = `
+    <h2>Ajouter tes sons</h2>
+    <div class="status ${st.sounds ? "ok" : ""}">${check(st.sounds > 0)}${st.sounds
+      ? `<b>${plural(st.sounds, "son")} dans ta bibliothèque.</b> Tu peux en ajouter d'autres quand tu veux.`
+      : "<b>Ta bibliothèque est vide.</b> Ajoute des sons pour commencer."}</div>
+    <div class="choices">
+      <button class="choice" data-wact="games" type="button"><span class="node-ic">${icon("download")}</span><b>Depuis mes jeux</b><small>Wolfenstein ET, Counter-Strike: Source, Warcraft III</small></button>
+      <button class="choice" data-wact="folder" type="button"><span class="node-ic">${icon("folder-plus")}</span><b>Un dossier de mon PC</b><small>Copié avec tous ses sous-dossiers</small></button>
+      <button class="choice" data-wact="disk" type="button"><span class="node-ic">${icon("drive")}</span><b>Chercher sur mon PC</b><small>Trouver des fichiers audio sur tes disques</small></button>
+    </div>
+    <div class="keys-help" style="margin-top:18px">
+      <kbd>Clic</kbd><span>sur un son : le jouer dans le micro</span>
+      <kbd>/</kbd><span>chercher un son, puis Entrée pour jouer le premier résultat</span>
+      <kbd>Échap</kbd><span>tout arrêter</span>
+    </div>`;
+  const last = W.step === WSTEPS.length - 1;
+  openModal(`<div class="wizard">
+    <div class="wz-steps">${steps}</div>
+    <div class="wz-body">${body}</div>
+    <div class="modal-actions wz-foot">
+      ${W.step ? `<button class="secondary" data-wnav="-1" type="button">Précédent</button>` : `<button class="secondary" data-action="close" type="button">Plus tard</button>`}
+      <span class="spacer"></span>
+      <span class="muted">Étape ${W.step + 1} sur ${WSTEPS.length}</span>
+      <button class="primary" data-wnav="${last ? "end" : 1}" type="button">${last ? "Terminer" : W.step === 0 ? "C'est parti" : "Suivant"}</button>
+    </div></div>`);
+  $(".modal-card").classList.add("wide");
+  $$("select[data-dev]", $("#modal-body")).forEach((s) => s.addEventListener("change", async () => {
+    await api.set_device(s.dataset.dev, s.value);
+    W.st = await api.setup_status(false);
+    renderWizard();
+  }));
+}
+
+$("#modal").addEventListener("click", async (e) => {
+  if (!W.open) return;
+  const t = e.target.closest("[data-wz],[data-wnav],[data-wact],[data-wtab]");
+  if (!t) return;
+  if (t.dataset.wz) { W.step = +t.dataset.wz; return renderWizard(); }
+  if (t.dataset.wtab) { W.tab = t.dataset.wtab; return renderWizard(); }
+  if (t.dataset.wnav === "end") {
+    await api.setup_done(true);
+    closeModal();
+    updateBanner();
+    toast("Configuration terminée. Amuse-toi bien ! 🎉", "ok");
+    return;
+  }
+  if (t.dataset.wnav) { W.step = Math.max(0, Math.min(WSTEPS.length - 1, W.step + +t.dataset.wnav)); W.st = await api.setup_status(false); return renderWizard(); }
+  const act = t.dataset.wact;
+  if (act === "vbcable") api.open_url("vbcable");
+  else if (act === "sound") api.open_sound_settings();
+  else if (act === "recheck") {
+    if (S.running) { await api.stop_engine(); setLive(false); }
+    W.st = await api.setup_status(true);
+    toast(W.st.cable_found ? "Câble virtuel détecté ✓" : "Toujours pas de câble. As-tu redémarré le PC après l'installation ?", W.st.cable_found ? "ok" : "err");
+    renderWizard();
+  } else if (act === "toggle") {
+    if (S.running) { await api.stop_engine(); setLive(false); }
+    else {
+      const r = await api.start();
+      if (!r.ok) { toast(r.error, "err"); return; }
+      setLive(true);
+    }
+    renderWizard();
+  } else if (act === "test") {
+    const r = await api.play_test();
+    if (!r.ok) toast(r.error, "err");
+    else { W.sentTest = true; renderWizard(); }
+  } else if (act === "games") { W.open = false; openImport(); }
+  else if (act === "folder") { W.open = false; closeModal(); importFolder(""); }
+  else if (act === "disk") { W.open = false; closeModal(); setView("disk"); }
+});
+
+/** Appelée à chaque sondage du moteur : anime les barres de l'étape « Tester ». */
+function wizardTick(st) {
+  if (!W.open || W.step !== 3) return;
+  const mic = $("#wz-vu-mic"), out = $("#wz-vu-out");
+  if (mic) mic.style.width = `${Math.min(100, Math.sqrt(st.mic_level) * 100)}%`;
+  if (out) out.style.width = `${Math.min(100, Math.sqrt(st.out_level) * 100)}%`;
+  if (!W.heardVoice && st.running && st.mic_level > 0.04) { W.heardVoice = true; renderWizard(); }
+}
+
+async function updateBanner() {
+  const st = await api.setup_status(false);
+  const b = $("#setup-banner");
+  b.hidden = st.setup_done;
+  if (!st.setup_done) b.innerHTML = `${icon("help")}<span><b>Configuration pas terminée.</b> L'assistant t'explique tout, étape par étape (2 minutes).</span>
+    <button class="primary small" data-action="wizard" type="button">Lancer l'assistant</button>`;
+}
+
 /* aide */
 function openHelp() {
-  openModal(`<div class="help"><h2>Bienvenue dans MicBoard 👋</h2>
-    <p class="muted">Envoie des sons dans ton micro, en plus de ta voix, dans Discord, les jeux ou OBS.</p>
-    <div class="steps">
-      <div class="step"><b>1</b><p>Installe <code>VB-Audio Virtual Cable</code> (gratuit, vb-audio.com/Cable) puis redémarre.</p></div>
-      <div class="step"><b>2</b><p>Dans <b style="all:unset;color:var(--text)">Réglages</b>, choisis ton micro, la sortie <code>CABLE Input</code> et ton casque. Clique sur « Micro hors ligne » pour l'activer.</p></div>
-      <div class="step"><b>3</b><p>Dans Discord ou ton jeu, choisis <code>CABLE Output</code> comme micro. C'est tout !</p></div>
-    </div>
+  W.open = false;
+  const faq = [
+    ["Windows m'empêche d'ouvrir MicBoard.exe", "C'est SmartScreen : MicBoard n'est pas signé numériquement. Clique sur <b>Informations complémentaires</b>, puis sur <b>Exécuter quand même</b>."],
+    ["Les autres n'entendent rien", "Vérifie que le bouton en haut à gauche affiche <b>En direct</b>, que Discord ou le jeu utilise <code>CABLE Output</code> comme micro, et dans Discord, que la suppression du bruit est désactivée. En Push-to-talk, les sons ne passent que pendant que tu appuies."],
+    ["Ils entendent les sons mais pas ma voix", "Dans Réglages, « Mon vrai micro » doit être ton micro (pas CABLE Output). Le bouton micro en bas de MicBoard ne doit pas être barré : sa barre bouge quand tu parles."],
+    ["Je n'entends pas les sons moi-même", "Choisis ton casque dans Réglages › « Retour casque », et monte le curseur casque en bas à droite."],
+    ["« CABLE Input » n'apparaît pas", "Installe VB-Cable (étape 2 de l'assistant), puis <b>redémarre le PC</b>. Le bouton « vérifier » de l'assistant relit la liste des appareils."],
+    ["Le son est haché ou un appareil refuse de s'ouvrir", "Dans Réglages, change le « Pilote audio » pour <b>MME</b>."],
+    ["Les raccourcis clavier ne marchent pas en jeu", "Si le jeu est lancé en administrateur, lance aussi MicBoard en administrateur (clic droit › Exécuter en tant qu'administrateur)."],
+  ];
+  openModal(`<div class="help"><h2>Aide</h2>
+    <p class="muted">Le trajet du son :</p>
+    ${chainHTML()}
+    <div class="help-cta"><div><b>Quelque chose ne marche pas ?</b><br><span class="muted">L'assistant vérifie chaque étape avec toi.</span></div>
+      <button class="primary" data-action="wizard" type="button">Relancer l'assistant</button></div>
+    <h3>Dépannage</h3>
+    <div class="faq">${faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join("")}</div>
+    <h3>Raccourcis</h3>
     <div class="keys-help">
       <kbd>/</kbd><span>Chercher un son (tape, puis Entrée pour jouer le premier résultat)</span>
       <kbd>↑ ↓ ← →</kbd><span>Se déplacer entre les sons</span>
       <kbd>Entrée</kbd><span>Jouer dans le micro</span>
       <kbd>Maj + Entrée</kbd><span>Écouter dans le casque seulement</span>
+      <kbd>Retour arrière</kbd><span>Remonter d'un dossier</span>
       <kbd>Échap</kbd><span>Effacer la recherche, puis tout arrêter</span>
     </div>
-    <div class="modal-actions"><button class="secondary" data-action="import" type="button">${icon("download")}Importer des sons</button>
-      <button class="primary" data-action="close" type="button">C'est compris</button></div></div>`);
+    <div class="modal-actions"><button class="primary" data-action="close" type="button">Fermer</button></div></div>`);
+  $(".modal-card").classList.add("wide");
 }
 
 /* ------------------------------------------------------------------ recherche sur le PC */
