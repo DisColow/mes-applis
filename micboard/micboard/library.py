@@ -79,3 +79,126 @@ class SoundCache:
         while len(self._items) > self._max:
             self._items.popitem(last=False)
         return data
+
+
+# --- métadonnées (titre, commentaire, durée) ---------------------------------------------------
+TAG_MAX = 120  # au-delà, un commentaire est coupé pour l'affichage
+
+
+def _clean(value) -> str:
+    """Texte de balise lisible : 1re ligne, sans caractères nuls ni espaces superflus."""
+    if isinstance(value, (list, tuple)):
+        value = next((v for v in value if str(v).strip()), "")
+    text = str(value or "").replace("\x00", " ").strip()
+    text = " ".join(text.splitlines()[0].split()) if text else ""
+    return text[:TAG_MAX - 1] + "…" if len(text) > TAG_MAX else text
+
+
+def _mutagen_tags(path: str) -> tuple[str, str, float | None]:
+    try:
+        import mutagen
+        f = mutagen.File(path)
+    except Exception:
+        return "", "", None
+    if f is None:
+        return "", "", None
+    duration = getattr(getattr(f, "info", None), "length", None)
+    tags = getattr(f, "tags", None)
+    title = comment = ""
+    if tags is not None:
+        if hasattr(tags, "getall"):  # ID3 (MP3, et WAV/AIFF avec un bloc ID3)
+            title = _clean([str(t) for t in tags.getall("TIT2")])
+            comment = _clean([str(c) for c in tags.getall("COMM")])
+        else:  # Vorbis (OGG/FLAC), MP4…
+            def get(*keys):
+                for k in keys:
+                    try:
+                        v = tags.get(k)
+                    except Exception:
+                        v = None
+                    if v:
+                        return _clean(v)
+                return ""
+            title = get("title", "TITLE", "\xa9nam")
+            comment = get("comment", "COMMENT", "description", "DESCRIPTION", "\xa9cmt")
+    return title, comment, duration
+
+
+def read_tags(path: str | os.PathLike) -> dict:
+    """{'title', 'comment', 'duration'} d'un fichier audio ; chaînes vides si absentes."""
+    path = str(path)
+    title = comment = ""
+    duration = None
+    try:
+        import soundfile as sf
+        with sf.SoundFile(path) as f:  # WAV (bloc INFO), FLAC, OGG…
+            title, comment = _clean(f.title), _clean(f.comment)
+            duration = f.frames / f.samplerate if f.samplerate else None
+    except Exception:
+        pass
+    if not title or not comment or duration is None:
+        m_title, m_comment, m_duration = _mutagen_tags(path)
+        title = title or m_title
+        comment = comment or m_comment
+        duration = duration if duration is not None else m_duration
+    return {"title": title, "comment": comment, "duration": duration or 0.0}
+
+
+def display_name(stem: str, tags: dict | None) -> tuple[str, str]:
+    """Nom à afficher et sa source : le titre, sinon le commentaire, sinon le nom du fichier."""
+    from .search import pretty_name
+    if tags:
+        for key in ("title", "comment"):
+            value = (tags.get(key) or "").strip()
+            if value and value.lower() != stem.lower():
+                return value, key
+    return pretty_name(stem), "file"
+
+
+class TagCache:
+    """Cache des métadonnées sur disque (clé : chemin ; valide tant que taille et date n'ont pas changé)."""
+
+    def __init__(self, file: Path | None):
+        self.file = file
+        self._data: dict[str, list] = {}
+        self.dirty = False
+        if file:
+            try:
+                import json
+                self._data = json.loads(Path(file).read_text(encoding="utf-8"))
+            except Exception:
+                self._data = {}
+
+    @staticmethod
+    def _stamp(path: str) -> tuple[int, int] | None:
+        try:
+            st = os.stat(path)
+            return st.st_size, int(st.st_mtime)
+        except OSError:
+            return None
+
+    def get(self, path: str) -> dict | None:
+        item = self._data.get(path)
+        stamp = self._stamp(path)
+        if item and stamp and tuple(item[:2]) == stamp:
+            return {"title": item[2], "comment": item[3], "duration": item[4]}
+        return None
+
+    def put(self, path: str, tags: dict) -> None:
+        stamp = self._stamp(path)
+        if stamp:
+            self._data[path] = [*stamp, tags["title"], tags["comment"], tags["duration"]]
+            self.dirty = True
+
+    def save(self, keep: set[str] | None = None) -> None:
+        if not self.file or not self.dirty:
+            return
+        if keep is not None:
+            self._data = {k: v for k, v in self._data.items() if k in keep}
+        try:
+            import json
+            Path(self.file).parent.mkdir(parents=True, exist_ok=True)
+            Path(self.file).write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")
+            self.dirty = False
+        except OSError:
+            pass

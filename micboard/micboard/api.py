@@ -46,6 +46,10 @@ class Api:
         self._hotkeys: dict[str, str] = self._cfg.get("hotkeys", {})
         self._favorites: list[str] = self._cfg.get("favorites", [])
         self._durations: dict[str, float] = {}
+        self._tags: dict[str, dict] = {}  # chemin -> {"title", "comment", "duration"}
+        self._tag_cache = library.TagCache(self._cfg_file.parent / "tags.json")
+        self._lib_version = 0             # change quand des noms arrivent des métadonnées
+        self._scan_id = 0
         self._disk: dict[str, DiskSearch] = {}
         self._window = None
         self._message = ""
@@ -97,22 +101,47 @@ class Api:
         self._tree = tree
         self._index = Index(self._root, files)
         self._favorites = [f for f in self._favorites if Path(f).exists()]
-        threading.Thread(target=self._measure, args=(files,), daemon=True).start()
-        return self.categories()
-
-    def _measure(self, files: list[Path]) -> None:
-        try:
-            import soundfile as sf
-        except Exception:
-            return
+        # Métadonnées déjà connues : appliquées tout de suite ; les autres sont lues en arrière-plan.
+        missing = []
         for f in files:
             key = str(f)
-            if key not in self._durations:
-                try:
-                    info = sf.info(key)
-                    self._durations[key] = info.frames / info.samplerate
-                except Exception:
-                    self._durations[key] = 0.0
+            tags = self._tags.get(key) or self._tag_cache.get(key)
+            if tags is None:
+                missing.append(f)
+            else:
+                self._apply_tags(key, tags)
+        self._scan_id += 1
+        self._lib_version += 1
+        threading.Thread(target=self._read_tags, args=(missing, self._scan_id, {str(f) for f in files}),
+                         daemon=True).start()
+        return self.categories()
+
+    def _apply_tags(self, key: str, tags: dict) -> bool:
+        self._tags[key] = tags
+        self._durations[key] = tags.get("duration") or 0.0
+        name, source = library.display_name(Path(key).stem, tags)
+        return self._index.set_name(key, name, source)
+
+    def _read_tags(self, files: list[Path], scan_id: int, all_keys: set[str]) -> None:
+        """Lit titre, commentaire et durée des fichiers pas encore en cache (tâche de fond)."""
+        changed = 0
+        for i, f in enumerate(files):
+            if scan_id != self._scan_id:  # une nouvelle analyse a été lancée entre-temps
+                return
+            key = str(f)
+            tags = library.read_tags(key)
+            self._tag_cache.put(key, tags)
+            changed += self._apply_tags(key, tags)
+            if changed and i % 100 == 99:  # l'interface se met à jour par paquets
+                self._lib_version += 1
+                changed = 0
+        if changed:
+            self._lib_version += 1
+        self._tag_cache.save(keep=all_keys)
+
+    def _measure(self, files: list[Path]) -> None:  # utilisé par les outils de test
+        for f in files:
+            self._apply_tags(str(f), library.read_tags(f))
 
     def categories(self) -> list[dict]:
         counts = self._index.categories()
@@ -128,8 +157,11 @@ class Api:
 
     def _entry_dict(self, e) -> dict:
         key = str(e.path)
-        return {"path": key, "name": e.name, "file": e.path.name, "category": e.category,
-                "folder": e.folder, "dir": e.rel_dir, "duration": self._durations.get(key),
+        tags = self._tags.get(key) or {}
+        return {"path": key, "name": e.name, "source": e.source, "file": e.path.name,
+                "title": tags.get("title", ""), "comment": tags.get("comment", ""),
+                "category": e.category, "folder": e.folder, "dir": e.rel_dir,
+                "duration": self._durations.get(key),
                 "favorite": key in self._favorites, "hotkey": self._hotkeys.get(key, "")}
 
     # --- arborescence ------------------------------------------------------------------
@@ -249,7 +281,7 @@ class Api:
     def status(self) -> dict:
         mic, out = self._mixer.levels()
         msg, self._message = self._message, ""
-        return {"running": self._engine.running, "playing": self._mixer.active(),
+        return {"running": self._engine.running, "playing": self._mixer.active(), "lib_version": self._lib_version,
                 "mic_level": mic, "out_level": out, "message": msg}
 
     # --- mélange ------------------------------------------------------------------------

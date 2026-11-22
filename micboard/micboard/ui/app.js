@@ -272,12 +272,16 @@ function cardHTML(r, i, showPath) {
   const pathHTML = where
     ? `<span>·</span><span class="folder goto" data-act="goto" title="Aller dans ${esc(r.dir)}">${highlight(where.split("/").slice(-2).join(" › "))}</span>`
     : "";
-  return `<div class="card${i === S.sel ? " sel" : ""}" style="--c:${c.color};animation-delay:${Math.min(i, 30) * 8}ms"
-              data-i="${i}" data-path="${esc(r.path)}" title="${esc(r.dir)}/${esc(r.file)}" tabindex="-1">
+  const fromTags = r.source && r.source !== "file";
+  const fileHTML = fromTags ? `<span>·</span><span class="folder file">${highlight(r.file)}</span>` : "";
+  const tip = [r.title && `Titre : ${r.title}`, r.comment && `Commentaire : ${r.comment}`,
+    `Fichier : ${r.dir ? `${r.dir}/` : ""}${r.file}`].filter(Boolean).join("\n");
+  return `<div class="card${i === S.sel ? " sel" : ""}${fromTags ? " tagged" : ""}" style="--c:${c.color};animation-delay:${Math.min(i, 30) * 8}ms"
+              data-i="${i}" data-path="${esc(r.path)}" title="${esc(tip)}" tabindex="-1">
     <span class="play">${icon("play")}</span>
     <div class="info">
       <div class="name">${highlight(r.name)}</div>
-      <div class="meta"><span class="tag">${esc(showPath && !S.folder || S.view === "favorites" ? c.short : r.file.split(".").pop().toUpperCase())}</span>${pathHTML}${r.duration ? `<span>·</span><span>${fmtDur(r.duration)}</span>` : ""}</div>
+      <div class="meta"><span class="tag">${esc(showPath && !S.folder || S.view === "favorites" ? c.short : r.file.split(".").pop().toUpperCase())}</span>${pathHTML}${r.duration ? `<span>·</span><span>${fmtDur(r.duration)}</span>` : ""}${fileHTML}</div>
     </div>
     <div class="badges">${r.hotkey ? `<kbd>${esc(r.hotkey)}</kbd>` : ""}${r.favorite ? `<svg class="star"><use href="#i-star"/></svg>` : ""}</div>
     <div class="acts">
@@ -401,6 +405,8 @@ async function pollStatus() {
   try { st = await api.status(); } catch { return; }
   setLive(st.running);
   wizardTick(st);
+  if (S.libVersion !== undefined && st.lib_version !== S.libVersion && S.view !== "disk") load(); // titres lus
+  S.libVersion = st.lib_version;
   if (st.message) toast(st.message, "err");
   const vu = $("#vu-mic");
   vu.style.width = `${Math.min(100, Math.sqrt(st.mic_level) * 100)}%`;

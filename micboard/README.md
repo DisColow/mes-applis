@@ -94,6 +94,14 @@ déplie avec les petites flèches ; un clic sur un dossier l'ouvre. Dans la page
 apparaissent en tuiles au-dessus des sons, et le fil d'Ariane (Bibliothèque › … › dossier) permet
 de remonter. **Retour arrière** remonte d'un dossier.
 
+### Noms des sons
+
+Si un fichier audio contient un **titre** dans ses métadonnées (balises ID3 des MP3, Vorbis des OGG/FLAC,
+bloc INFO des WAV), c'est ce titre qui s'affiche ; sinon son **commentaire** ; sinon le nom du fichier,
+rendu lisible (« PeasantYes1 » devient « Peasant Yes 1 »). Le nom du fichier reste écrit en petit sous le
+titre, et la recherche trouve le son par l'un comme par l'autre. Les métadonnées sont lues en arrière-plan
+au premier lancement, puis gardées en cache (`%APPDATA%\MicBoard\tags.json`).
+
 ### Rechercher un son
 
 Tape dans la barre de recherche (touche **/** pour y aller) : les résultats s'affichent pendant la

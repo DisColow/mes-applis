@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from .library import is_audio
+from .library import display_name, is_audio, read_tags
 
 _CAMEL = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])")
 _SPLIT = re.compile(r"[^0-9a-z]+")
@@ -47,6 +47,7 @@ class Entry:
     category: str      # premier dossier sous la racine
     folder: str        # sous-dossier (sans la catégorie)
     rel_dir: str = ""  # dossier complet depuis la racine, « Catégorie/sous/dossier »
+    source: str = "file"  # d'où vient `name` : « title », « comment » ou « file »
     name_tokens: list[str] = field(default_factory=list)
     folder_tokens: list[str] = field(default_factory=list)
     blob: str = ""     # tout le texte collé, pour les sous-chaînes
@@ -82,10 +83,25 @@ class Index:
             folder = "/".join(parts[1:])
             e = Entry(path=f, name=pretty_name(f.stem), category=category, folder=folder,
                       rel_dir="/".join(parts))
-            e.name_tokens = tokens(f.stem)
             e.folder_tokens = tokens(folder)
-            e.blob = "".join(e.name_tokens)
+            self._set_name(e, e.name, "file")
             self.entries.append(e)
+        self._by_path = {str(e.path): e for e in self.entries}
+
+    @staticmethod
+    def _set_name(e: Entry, name: str, source: str) -> None:
+        """Change le nom affiché ; la recherche trouve le son par ce nom ET par son nom de fichier."""
+        e.name, e.source = name, source
+        shown, stem = tokens(name), tokens(e.path.stem)
+        e.name_tokens = shown + [t for t in stem if t not in shown]
+        e.blob = "".join(shown) + "|" + "".join(stem)
+
+    def set_name(self, path: str, name: str, source: str) -> bool:
+        e = self._by_path.get(str(path))
+        if e is None or (e.name, e.source) == (name, source):
+            return False
+        self._set_name(e, name, source)
+        return True
 
     def categories(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -165,6 +181,18 @@ class DiskSearch:
         hay = "".join(tokens(path))
         return all(q in hay for q in self.q_tokens)
 
+    def _match(self, path: str) -> dict | None:
+        """Balises du fichier s'il correspond à la recherche (par son chemin, sinon par son titre ou
+        son commentaire), None sinon."""
+        tags = read_tags(path)
+        if self.matches(path):
+            return tags
+        if self.q_tokens and (tags["title"] or tags["comment"]):
+            hay = "".join(tokens(f"{tags['title']} {tags['comment']}"))
+            if all(q in hay for q in self.q_tokens):
+                return tags
+        return None
+
     def _run(self) -> None:
         stack = list(reversed(self.roots))
         try:
@@ -185,11 +213,13 @@ class DiskSearch:
                                     subdirs.append(entry.path)
                             elif is_audio(entry.name):
                                 self.scanned_files += 1
-                                if self.matches(entry.path):
+                                found = self._match(entry.path)
+                                if found is not None:
                                     st = entry.stat()
+                                    name, source = display_name(Path(entry.name).stem, found)
                                     with self._lock:
                                         self.results.append({
-                                            "path": entry.path, "name": pretty_name(Path(entry.name).stem),
+                                            "path": entry.path, "name": name, "source": source,
                                             "file": entry.name, "folder": d, "size": st.st_size})
                                     if len(self.results) >= self.max_results:
                                         return
