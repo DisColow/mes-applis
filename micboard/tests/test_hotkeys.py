@@ -13,7 +13,8 @@ def test_physical_keys_become_scan_codes():
     assert hk.normalize("Digit1") == "#2"
     assert hk.normalize("shift+Numpad1") == "shift+#79"
     assert hk.normalize("F5") == "f5" and hk.normalize("space") == "space"
-    assert hk.for_keyboard("ctrl+#16") == ["ctrl", 16]
+    assert hk.for_keyboard("ctrl+#16") == ("ctrl", 16)
+    hash(hk.for_keyboard("ctrl+alt+#2"))  # doit pouvoir servir de clé (voir keyboard.add_hotkey)
 
 
 def test_labels():
@@ -75,3 +76,37 @@ def test_captured_label_used_when_layout_unknown(tmp_path, monkeypatch):
     monkeypatch.setattr(hk, "key_char", lambda sc: "a" if sc == 16 else "")
     assert a.search("go")["results"][0]["hotkey"] == "Ctrl + A"
     assert hk.label("f5", "Ctrl + A") == "F5"  # pas de code matériel : nom calculé
+
+
+def test_hotkeys_really_register(tmp_path, monkeypatch):
+    """Reproduit keyboard.add_hotkey : le raccourci sert de clé de dictionnaire (une liste plantait)."""
+    import keyboard
+    registered = {}
+
+    def fake_add_hotkey(hotkey, callback, args=(), **_kw):
+        # la vraie fonction finit par « _hotkeys[hotkey] = … » : TypeError si ce n'est pas hachable
+        registered[hotkey] = (callback, args)
+
+    monkeypatch.setattr(keyboard, "add_hotkey", fake_add_hotkey)
+    monkeypatch.setattr(keyboard, "unhook_all_hotkeys", lambda: registered.clear())
+    a, root = make_api(tmp_path, monkeypatch)
+    go = str(root / "Counter-Strike Source" / "radio" / "go.wav")
+    a.set_hotkey(go, "ctrl+alt+Digit1", "Ctrl + Alt + 1")  # Ctrl + Alt + & en AZERTY
+    a.set_stop_hotkey("shift+Numpad0", "Maj + Num 0")
+    assert ("ctrl", "alt", 2) in registered and ("shift", 82) in registered
+    callback, args = registered[("ctrl", "alt", 2)]
+    assert args == (go,)
+    assert a.status()["message"] == ""  # aucun échec signalé
+
+
+def test_hotkey_failure_is_reported(tmp_path, monkeypatch):
+    import keyboard
+
+    def broken(*_a, **_kw):
+        raise ValueError("touche inconnue")
+
+    monkeypatch.setattr(keyboard, "add_hotkey", broken)
+    monkeypatch.setattr(keyboard, "unhook_all_hotkeys", lambda: None)
+    a, root = make_api(tmp_path, monkeypatch)
+    a.set_hotkey(str(root / "Mes sons" / "klaxon.wav"), "f7", "F7")
+    assert "F7" in a.status()["message"]

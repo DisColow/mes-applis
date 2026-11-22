@@ -77,9 +77,12 @@ def migrate(combo: str) -> str:
     return normalize("+".join(f"#{LEGACY[t]}" if t in LEGACY else t for t in tokens))
 
 
-def for_keyboard(combo: str) -> list:
-    """Forme acceptée par keyboard.add_hotkey : ["ctrl", 16] (les scan codes en entiers)."""
-    return [int(t[1:]) if t.startswith("#") else t for t in combo.split("+") if t]
+def for_keyboard(combo: str) -> tuple:
+    """Forme acceptée par keyboard.add_hotkey : ("ctrl", 16), les scan codes en entiers.
+
+    Un tuple et surtout pas une liste : add_hotkey range le raccourci dans un dictionnaire dont il est
+    la clé, et une liste y est refusée (« unhashable type: 'list' »)."""
+    return tuple(int(t[1:]) if t.startswith("#") else t for t in combo.split("+") if t)
 
 
 def _char_win32(scan_code: int) -> str:

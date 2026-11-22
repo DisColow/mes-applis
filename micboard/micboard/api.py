@@ -448,17 +448,21 @@ class Api:
             keyboard.unhook_all_hotkeys()
         except Exception:
             return
+        failed = []
+
+        def add(combo, callback, args=()):
+            try:
+                keyboard.add_hotkey(hk.for_keyboard(combo), callback, args=args)
+            except Exception:
+                failed.append(self._hk_label(combo))
+
         for path, combo in self._hotkeys.items():
             if Path(path).exists():
-                try:
-                    keyboard.add_hotkey(hk.for_keyboard(combo), self._hotkey_play, args=(path,))
-                except Exception:
-                    pass
+                add(combo, self._hotkey_play, (path,))
         if self._cfg.get("stop_hotkey"):
-            try:
-                keyboard.add_hotkey(hk.for_keyboard(self._cfg["stop_hotkey"]), self._mixer.stop_all)
-            except Exception:
-                pass
+            add(self._cfg["stop_hotkey"], self._mixer.stop_all)
+        if failed:  # plus jamais d'échec silencieux : l'interface l'affiche
+            self._message = "Raccourci impossible à activer : " + ", ".join(failed)
 
     # --- recherche sur le PC -------------------------------------------------------------
     def disk_roots(self) -> list[dict]:
