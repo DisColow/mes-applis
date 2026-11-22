@@ -17,6 +17,7 @@ from pathlib import Path
 from . import importers, library
 from .audio import AudioEngine, Mixer
 from .search import DiskSearch, Index, drives, file_key
+from . import hotkeys as hk
 from .winframe import Frame
 
 APP = "MicBoard"
@@ -45,6 +46,12 @@ class Api:
         self._engine.mixer = self._mixer
         self._cache = library.SoundCache()
         self._hotkeys: dict[str, str] = self._cfg.get("hotkeys", {})
+        if self._cfg.get("hotkeys_version") != 2:  # anciens raccourcis enregistrés en QWERTY
+            self._hotkeys = {p: hk.migrate(c) for p, c in self._hotkeys.items()}
+            if self._cfg.get("stop_hotkey"):
+                self._cfg["stop_hotkey"] = hk.migrate(self._cfg["stop_hotkey"])
+            self._cfg["hotkeys_version"] = 2
+        self._hotkey_labels: dict[str, str] = self._cfg.get("hotkey_labels", {})  # combinaison -> nom capturé
         self._favorites: list[str] = self._cfg.get("favorites", [])
         self._durations: dict[str, float] = {}
         self._tags: dict[str, dict] = {}  # chemin -> {"title", "comment", "duration"}
@@ -87,7 +94,10 @@ class Api:
             return {}
 
     def _save(self) -> None:
-        self._cfg.update(hotkeys=self._hotkeys, favorites=self._favorites, sounds_root=str(self._root))
+        used = set(self._hotkeys.values()) | {self._cfg.get("stop_hotkey", "")}
+        self._hotkey_labels = {c: l for c, l in self._hotkey_labels.items() if c in used}
+        self._cfg.update(hotkeys=self._hotkeys, favorites=self._favorites, sounds_root=str(self._root),
+                         hotkey_labels=self._hotkey_labels)
         try:
             self._cfg_file.parent.mkdir(parents=True, exist_ok=True)
             self._cfg_file.write_text(json.dumps(self._cfg, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -196,7 +206,7 @@ class Api:
                 "title": tags.get("title", ""), "comment": tags.get("comment", ""),
                 "category": e.category, "folder": e.folder, "dir": e.rel_dir,
                 "duration": self._durations.get(key),
-                "favorite": key in self._favorites, "hotkey": self._hotkeys.get(key, "")}
+                "favorite": key in self._favorites, "hotkey": self._hk_label(self._hotkeys.get(key, ""))}
 
     # --- arborescence ------------------------------------------------------------------
     def _node(self, rel: str) -> dict | None:
@@ -352,7 +362,7 @@ class Api:
                "monitor": pick(self._cfg.get("monitor"), outputs)}
         return {"apis": apis, "inputs": inputs, "outputs": outputs, "selected": sel,
                 "cable_found": any("cable" in n.lower() for n in outputs), **self._mix_cfg(),
-                "stop_hotkey": self._cfg.get("stop_hotkey", ""), "sounds_root": str(self._root),
+                "stop_hotkey": self._hk_label(self._cfg.get("stop_hotkey", "")), "sounds_root": str(self._root),
                 "tag_encoding": self._tag_encoding(),
                 "tag_encodings": [{"id": k, "label": v} for k, v in library.TAG_ENCODINGS.items()]}
 
@@ -393,7 +403,17 @@ class Api:
         self._engine.stop()
 
     # --- raccourcis clavier globaux ------------------------------------------------------------
-    def set_hotkey(self, path: str, combo: str) -> str:
+    def _hk_label(self, combo: str) -> str:
+        return hk.label(combo, self._hotkey_labels.get(combo, ""))
+
+    def set_hotkey(self, path: str, combo: str, captured: str = "") -> str:
+        """`combo` vient de l'interface (« ctrl+KeyQ ») avec le nom qu'elle a affiché (« Ctrl + A ») ;
+        renvoie le nom lisible du raccourci."""
+        combo = hk.normalize(combo)
+        if combo and captured:
+            self._hotkey_labels[combo] = captured
+        if self._cfg.get("stop_hotkey") == combo:
+            self._cfg["stop_hotkey"] = ""
         for p, c in list(self._hotkeys.items()):
             if c == combo:
                 del self._hotkeys[p]
@@ -403,12 +423,19 @@ class Api:
             self._hotkeys.pop(path, None)
         self._register_hotkeys()
         self._save()
-        return combo
+        return self._hk_label(combo)
 
-    def set_stop_hotkey(self, combo: str) -> None:
+    def set_stop_hotkey(self, combo: str, captured: str = "") -> str:
+        combo = hk.normalize(combo)
+        if combo and captured:
+            self._hotkey_labels[combo] = captured
+        for p, c in list(self._hotkeys.items()):
+            if c == combo:
+                del self._hotkeys[p]
         self._cfg["stop_hotkey"] = combo
         self._register_hotkeys()
         self._save()
+        return self._hk_label(combo)
 
     def _hotkey_play(self, path: str) -> None:
         r = self.play(path)
@@ -424,12 +451,12 @@ class Api:
         for path, combo in self._hotkeys.items():
             if Path(path).exists():
                 try:
-                    keyboard.add_hotkey(combo, self._hotkey_play, args=(path,))
+                    keyboard.add_hotkey(hk.for_keyboard(combo), self._hotkey_play, args=(path,))
                 except Exception:
                     pass
         if self._cfg.get("stop_hotkey"):
             try:
-                keyboard.add_hotkey(self._cfg["stop_hotkey"], self._mixer.stop_all)
+                keyboard.add_hotkey(hk.for_keyboard(self._cfg["stop_hotkey"]), self._mixer.stop_all)
             except Exception:
                 pass
 

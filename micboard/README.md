@@ -130,7 +130,9 @@ sur le dossier affiché sous un résultat y emmène.
 
 Au survol d'un son : pré-écoute 🎧, favori ⭐ (gros bouton en haut de la bibliothèque),
 **raccourci clavier global** ⌨ (marche même en plein jeu ; si le jeu est lancé en administrateur,
-lance MicBoard en administrateur aussi) et ouverture du dossier.
+lance MicBoard en administrateur aussi) et ouverture du dossier. Les raccourcis sont enregistrés par
+touche physique : ils marchent quelle que soit la disposition du clavier (AZERTY, QWERTY, QWERTZ…), et
+leur nom est affiché d'après ton clavier.
 
 ### Importer un dossier
 

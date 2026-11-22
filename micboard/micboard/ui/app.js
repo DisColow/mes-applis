@@ -667,12 +667,24 @@ async function openSettings() {
 let hotkeyCapture = null;
 const KEY_NAMES = { " ": "space", arrowup: "up", arrowdown: "down", arrowleft: "left", arrowright: "right",
   escape: "esc", control: "ctrl", meta: "windows", os: "windows", contextmenu: "menu", pageup: "page up", pagedown: "page down" };
+/* Touches dont le caractère dépend de la disposition du clavier (AZERTY, QWERTY…) : on envoie leur
+   position physique (e.code) et Python enregistre leur code matériel, qui ne dépend pas de la
+   disposition (micboard/hotkeys.py). Les autres touches (F1, flèches…) gardent leur nom. */
+const PHYSICAL = /^(Key[A-Z]|Digit\d|Numpad(\d|Add|Subtract|Multiply|Decimal)|Backquote|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Backslash|Comma|Period|Slash|IntlBackslash)$/;
+const LABELS = { ctrl: "Ctrl", alt: "Alt", shift: "Maj", windows: "Win", space: "Espace", up: "↑", down: "↓",
+  left: "←", right: "→", esc: "Échap", enter: "Entrée", tab: "Tab", backspace: "Retour arrière" };
+/** { id envoyé à Python, label affiché selon le clavier de l'utilisateur } */
 function keyName(e) {
-  if (e.code.startsWith("Numpad") && /^\d$/.test(e.code.slice(6))) return `num ${e.code.slice(6)}`;
-  if (/^Digit\d$/.test(e.code)) return e.code.slice(5);
-  if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3).toLowerCase();
+  if (PHYSICAL.test(e.code)) {
+    let label;
+    if (e.code.startsWith("Numpad")) label = `Num ${{ Add: "+", Subtract: "-", Multiply: "*", Decimal: "," }[e.code.slice(6)] ?? e.code.slice(6)}`;
+    else if (e.code.startsWith("Digit")) label = e.code.slice(5);
+    else label = (e.key.length === 1 && e.key.trim() ? e.key : e.code.replace(/^Key/, "")).toUpperCase();
+    return { id: e.code, label };
+  }
   const k = e.key.toLowerCase();
-  return KEY_NAMES[k] || k;
+  const id = KEY_NAMES[k] || k;
+  return { id, label: LABELS[id] || (/^f\d+$/.test(id) ? id.toUpperCase() : id.length === 1 ? id.toUpperCase() : id) };
 }
 function openHotkey(r) {
   const forStop = r === null;
@@ -687,9 +699,11 @@ function openHotkey(r) {
     </div>`, true);
   hotkeyCapture = { combo: "" };
   const save = async (combo) => {
-    if (forStop) { await api.set_stop_hotkey(combo); S.mix.stop_hotkey = combo; closeModal(); openSettings(); }
-    else { await api.set_hotkey(r.path, combo); closeModal(); load(); }
-    toast(combo ? `Raccourci « ${combo} » enregistré` : "Raccourci supprimé", "ok");
+    let label;
+    const seen = combo ? hotkeyCapture.label : "";
+    if (forStop) { label = await api.set_stop_hotkey(combo, seen); S.mix.stop_hotkey = label; closeModal(); openSettings(); }
+    else { label = await api.set_hotkey(r.path, combo, seen); closeModal(); load(); }
+    toast(combo ? `Raccourci « ${label} » enregistré` : "Raccourci supprimé", "ok");
   };
   $("#hk-save").addEventListener("click", () => save(hotkeyCapture.combo));
   $("#hk-del")?.addEventListener("click", () => save(""));
@@ -698,13 +712,16 @@ document.addEventListener("keydown", (e) => {
   if (!hotkeyCapture || $("#modal").hidden) return;
   e.preventDefault();
   e.stopPropagation();
+  const MODS = ["ctrl", "alt", "shift", "windows"];
   const mods = [e.ctrlKey && "ctrl", e.altKey && "alt", e.shiftKey && "shift", e.metaKey && "windows"].filter(Boolean);
   const k = keyName(e);
-  const combo = [...new Set([...mods, ...(["ctrl", "alt", "shift", "windows"].includes(k) ? [] : [k])])];
-  if (!combo.length) return;
-  hotkeyCapture.combo = combo.join("+");
-  $("#keys").innerHTML = combo.map((c) => `<kbd>${esc(c)}</kbd>`).join(`<span class="muted">+</span>`);
-  $("#hk-save").disabled = combo.every((c) => ["ctrl", "alt", "shift", "windows"].includes(c));
+  const keys = mods.map((m) => ({ id: m, label: LABELS[m] }));
+  if (!MODS.includes(k.id)) keys.push(k);
+  if (!keys.length) return;
+  hotkeyCapture.combo = keys.map((x) => x.id).join("+");
+  hotkeyCapture.label = keys.map((x) => x.label).join(" + ");
+  $("#keys").innerHTML = keys.map((x) => `<kbd>${esc(x.label)}</kbd>`).join(`<span class="muted">+</span>`);
+  $("#hk-save").disabled = keys.every((x) => MODS.includes(x.id));
 }, true);
 
 /* ------------------------------------------------------------------ assistant de configuration */
