@@ -628,6 +628,18 @@ async function openSettings() {
       <label class="lbl">Pilote audio</label><select data-dev="host_api">${opts(d.apis, d.selected.host_api)}</select>
       <span class="hint">Si un périphérique refuse de s'ouvrir, essaie « MME ».</span>
       <div class="sep"></div>
+      <label class="lbl">Lancer avec Windows</label>
+      <div class="toggle-row"><span class="muted">${d.autostart_supported
+        ? "MicBoard démarre caché dans la zone de notification, prêt pour tes raccourcis"
+        : "Disponible seulement dans MicBoard.exe"}</span>
+        <button class="tog ${d.autostart ? "on" : ""}" id="tog-autostart" type="button" ${d.autostart_supported ? "" : "disabled"}></button></div>
+      <label class="lbl">Réduire près de l'horloge</label>
+      <div class="toggle-row"><span class="muted">Le bouton « Réduire » range MicBoard dans la zone de notification (icône près de l'horloge)${d.tray_available ? "" : " — indisponible ici"}</span>
+        <button class="tog ${d.tray_minimize ? "on" : ""}" id="tog-tray" type="button"></button></div>
+      <label class="lbl">Micro actif au lancement</label>
+      <div class="toggle-row"><span class="muted">Active le micro dès l'ouverture de MicBoard, sans cliquer sur « Micro hors ligne »</span>
+        <button class="tog ${d.start_live ? "on" : ""}" id="tog-startlive" type="button"></button></div>
+      <div class="sep"></div>
       <label class="lbl">Un seul son à la fois</label>
       <div class="toggle-row"><span class="muted">Un nouveau son coupe le précédent</span><button class="tog ${d.exclusive ? "on" : ""}" id="tog-excl" type="button"></button></div>
       <label class="lbl">Tout arrêter</label>
@@ -646,6 +658,20 @@ async function openSettings() {
     await api.set_device(s.dataset.dev, s.value);
     if (s.dataset.dev === "host_api") openSettings();
   }));
+  $("#tog-autostart").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const r = await api.set_autostart(!btn.classList.contains("on"));
+    if (r.error) { toast(r.error, "err"); return; }
+    btn.classList.toggle("on", r.autostart);
+    toast(r.autostart ? "MicBoard se lancera avec Windows, dans la zone de notification" : "MicBoard ne se lancera plus avec Windows", "ok");
+  });
+  for (const [id, key] of [["#tog-tray", "tray_minimize"], ["#tog-startlive", "start_live"]]) {
+    $(id).addEventListener("click", (e) => {
+      const on = !e.currentTarget.classList.contains("on");
+      e.currentTarget.classList.toggle("on", on);
+      api.set_option(key, on);
+    });
+  }
   $("#tog-excl").addEventListener("click", (e) => {
     const on = !e.currentTarget.classList.contains("on");
     e.currentTarget.classList.toggle("on", on);

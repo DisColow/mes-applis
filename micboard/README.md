@@ -178,6 +178,18 @@ MicBoard dessine sa propre barre de titre : on déplace la fenêtre en la tirant
 double-clic pour l'agrandir (sans recouvrir la barre des tâches), et on la redimensionne par ses bords.
 **Alt+F4** ferme toujours la fenêtre.
 
+## Zone de notification et lancement avec Windows
+
+- **Réduire** (barre de titre) range MicBoard dans la **zone de notification**, près de l'horloge : la
+  fenêtre disparaît mais l'appli tourne toujours, et tes raccourcis clavier continuent de marcher. Un
+  clic sur l'icône la rouvre ; clic droit pour activer ou couper le micro, tout arrêter ou quitter.
+  (Réglages › *Réduire près de l'horloge* pour réduire plutôt dans la barre des tâches.)
+- Réglages › **Lancer avec Windows** : MicBoard démarre à l'ouverture de ta session, directement caché
+  dans la zone de notification. Si tu déplaces MicBoard.exe, l'entrée est remise à jour au prochain
+  lancement.
+- Réglages › **Micro actif au lancement** : le micro passe *En direct* tout seul à l'ouverture. Utile
+  avec le lancement avec Windows : tes raccourcis sont prêts sans rien ouvrir.
+
 ## Windows Defender et SmartScreen
 
 Deux protections différentes peuvent se plaindre :
@@ -222,6 +234,8 @@ python main.py            # python main.py --debug pour ouvrir les outils de dé
 - `micboard/importers.py` : extraction depuis les `.pk3` d'ET, le `.vpk` de CS:S et un dossier WC3 ;
 - `micboard/api.py` : fonctions appelées par l'interface ;
 - `micboard/ui/` : interface (HTML, CSS, JavaScript), affichée par pywebview avec le moteur d'Edge (WebView2) ;
+- `micboard/system.py` : zone de notification et lancement avec Windows ; `micboard/hotkeys.py` : raccourcis
+  indépendants de la disposition du clavier ;
 - `micboard/app.py` : création de la fenêtre ; `micboard/winframe.py` : agrandir et redimensionner la
   fenêtre sans cadre ;
 - `tools/make_icon.py` : fabrique `assets/micboard.ico` à partir du logo ; `tools/version_file.py` : fiche

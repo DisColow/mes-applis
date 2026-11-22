@@ -18,6 +18,7 @@ from . import importers, library
 from .audio import AudioEngine, Mixer
 from .search import DiskSearch, Index, drives, file_key
 from . import hotkeys as hk
+from . import system
 from .winframe import Frame
 
 APP = "MicBoard"
@@ -61,6 +62,9 @@ class Api:
         self._disk: dict[str, DiskSearch] = {}
         self._window = None
         self._frame = Frame()
+        self._tray = None            # icône de la zone de notification (créée par app.py)
+        self._tray_hint_shown = False
+        self._last_running = False
         self._message = ""
         self._apply_mix()
         self.rescan()
@@ -72,7 +76,41 @@ class Api:
 
     # --- barre de titre maison (fenêtre sans cadre Windows) ---------------------------------------
     def win_minimize(self) -> None:
-        self._frame.minimize()
+        """Réduire : dans la zone de notification si c'est activé (et possible), sinon dans la barre
+        des tâches."""
+        if self._cfg.get("tray_minimize", True) and self._tray is not None and self._tray.available:
+            self._window.hide()
+            if not self._tray_hint_shown:
+                self._tray_hint_shown = True
+                self._tray.notify("MicBoard continue ici : tes raccourcis marchent toujours. "
+                                  "Clique sur l'icône pour le rouvrir.")
+        else:
+            self._frame.minimize()
+
+    def _show_window(self) -> None:
+        """Rouvre la fenêtre depuis la zone de notification."""
+        if self._window is not None:
+            self._window.show()
+            self._window.restore()
+
+    def _tray_toggle_live(self) -> None:
+        if self._engine.running:
+            self.stop_engine()
+        else:
+            r = self.start()
+            if not r["ok"] and self._tray is not None:
+                self._tray.notify(r["error"])
+        if self._tray is not None:
+            self._tray.refresh()
+
+    def _on_window_ready(self) -> None:
+        """Après l'ouverture : activer le micro automatiquement si c'est demandé."""
+        if self._cfg.get("start_live") and not self._engine.running:
+            r = self.start()
+            if not r["ok"]:
+                self._message = r["error"]
+        if self._tray is not None:
+            self._tray.refresh()
 
     def win_toggle_max(self) -> bool:
         return self._frame.toggle_maximize()
@@ -323,6 +361,10 @@ class Api:
             self._mixer.stop_all()
 
     def status(self) -> dict:
+        if self._engine.running != self._last_running:  # coche du menu de l'icône à jour
+            self._last_running = self._engine.running
+            if self._tray is not None:
+                self._tray.refresh()
         mic, out = self._mixer.levels()
         msg, self._message = self._message, ""
         return {"running": self._engine.running, "playing": self._mixer.active(), "lib_version": self._lib_version,
@@ -364,6 +406,10 @@ class Api:
                 "cable_found": any("cable" in n.lower() for n in outputs), **self._mix_cfg(),
                 "stop_hotkey": self._hk_label(self._cfg.get("stop_hotkey", "")), "sounds_root": str(self._root),
                 "tag_encoding": self._tag_encoding(),
+                "tray_minimize": bool(self._cfg.get("tray_minimize", True)),
+                "tray_available": bool(self._tray is not None and self._tray.available),
+                "start_live": bool(self._cfg.get("start_live", False)),
+                "autostart": bool(system.autostart_get()), "autostart_supported": system.autostart_supported(),
                 "tag_encodings": [{"id": k, "label": v} for k, v in library.TAG_ENCODINGS.items()]}
 
     def set_device(self, key: str, value: str) -> dict:
@@ -636,7 +682,27 @@ class Api:
         if sys.platform == "win32":
             subprocess.Popen(["control", "mmsys.cpl,,1"])
 
+    # --- démarrage et zone de notification ----------------------------------------------------------
+    def set_option(self, key: str, value: bool) -> dict:
+        """Réglages simples (oui/non) : réduire dans la zone de notification, micro actif au lancement."""
+        if key in ("tray_minimize", "start_live"):
+            self._cfg[key] = bool(value)
+            self._save()
+        return self.devices()
+
+    def set_autostart(self, enabled: bool) -> dict:
+        """Lancer MicBoard avec Windows (caché dans la zone de notification)."""
+        if not system.autostart_supported():
+            return {"error": "Disponible seulement dans MicBoard.exe, sous Windows."}
+        try:
+            system.autostart_set(bool(enabled))
+        except OSError as e:
+            return {"error": f"Impossible de modifier le démarrage de Windows : {e}"}
+        return {"ok": True, "autostart": bool(system.autostart_get())}
+
     def shutdown(self) -> None:
+        if self._tray is not None:
+            self._tray.stop()
         self.disk_cancel()
         self._engine.stop()
         self._engine.close_preview()

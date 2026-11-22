@@ -52,7 +52,7 @@ jobs:
           pyinstaller --noconfirm --onefile --windowed --name MicBoard `
             --icon assets/micboard.ico --version-file build/version_info.txt `
             --add-data "micboard/ui;micboard/ui" --add-data "assets;assets" `
-            --collect-all webview --collect-submodules mutagen main.py
+            --collect-all webview --collect-submodules mutagen --collect-submodules pystray main.py
 
       - name: Signature de l'exe
         if: env.HAS_SIGN_CERT == 'true'
