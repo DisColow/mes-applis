@@ -155,8 +155,9 @@ def drives() -> list[str]:
 class DiskSearch:
     """Recherche de fichiers audio sur le disque, dans un thread, interrogeable par sondage."""
 
-    def __init__(self, roots: list[str], query: str = "", max_results: int = 3000):
+    def __init__(self, roots: list[str], query: str = "", max_results: int = 3000, encoding: str = "auto"):
         self.roots = [r for r in roots if r]
+        self.encoding = encoding
         self.q_tokens = tokens(query)
         self.max_results = max_results
         self.results: list[dict] = []
@@ -184,7 +185,7 @@ class DiskSearch:
     def _match(self, path: str) -> dict | None:
         """Balises du fichier s'il correspond à la recherche (par son chemin, sinon par son titre ou
         son commentaire), None sinon."""
-        tags = read_tags(path)
+        tags = read_tags(path, self.encoding)
         if self.matches(path):
             return tags
         if self.q_tokens and (tags["title"] or tags["comment"]):

@@ -102,3 +102,76 @@ def test_disk_search_matches_titles(tmp_path):
         time.sleep(0.02)
     r = s.poll(0)["results"]
     assert [(x["file"], x["name"], x["source"]) for x in r] == [("piste01.wav", "Explosion énorme", "title")]
+
+
+def add_info_chunk(path: Path, **fields: bytes) -> Path:
+    """Ajoute un bloc LIST/INFO aux octets donnés tels quels (INAM = titre, ICMT = commentaire)."""
+    raw = path.read_bytes()
+    info = b"INFO"
+    for key, value in fields.items():
+        value += b"\0"
+        info += key.encode() + len(value).to_bytes(4, "little") + value + (b"\0" if len(value) % 2 else b"")
+    lst = b"LIST" + len(info).to_bytes(4, "little") + info
+    path.write_bytes(raw[:4] + (len(raw) - 8 + len(lst)).to_bytes(4, "little") + raw[8:] + lst)
+    return path
+
+
+def test_decode_text():
+    assert library.decode_text("Prêt à partir".encode("utf-8")) == "Prêt à partir"
+    assert library.decode_text("Prêt à partir".encode("cp1252")) == "Prêt à partir"
+    assert library.decode_text("Ça marche".encode("cp1252")) == "Ça marche"
+    assert library.decode_text(b"\xef\xbb\xbf" + "été".encode("utf-8")) == "été"
+    assert library.decode_text("Привет".encode("cp1251"), "cp1251") == "Привет"
+    assert library.decode_text(b"\x81\x8d", "auto")  # jamais d'erreur, même sur des octets bizarres
+    assert library.decode_text(b"") == ""
+
+
+def test_wav_info_in_windows_1252(tmp_path):
+    p = add_info_chunk(write(tmp_path / "a.wav"), INAM="Très bien, c'est prêt !".encode("cp1252"),
+                       ICMT="Ça part".encode("cp1252"))
+    t = library.read_tags(p)
+    assert t["title"] == "Très bien, c'est prêt !" and t["comment"] == "Ça part"
+    p2 = add_info_chunk(write(tmp_path / "b.wav"), INAM="Déjà là".encode("utf-8"))
+    assert library.read_tags(p2)["title"] == "Déjà là"
+    p3 = add_info_chunk(write(tmp_path / "c.wav"), INAM="Привет".encode("cp1251"))
+    assert library.read_tags(p3, "cp1251")["title"] == "Привет"
+
+
+def test_id3_latin1_frames_holding_other_encodings(tmp_path):
+    from mutagen.id3 import TIT2
+    from mutagen.wave import WAVE
+    p = write(tmp_path / "a.wav")
+    w = WAVE(str(p))
+    w.add_tags()
+    # cadre marqué Latin-1 mais contenant de l'UTF-8 : mutagen lirait « PrÃªt »
+    w.tags.add(TIT2(encoding=0, text="Prêt".encode("utf-8").decode("latin-1")))
+    w.save()
+    assert library.read_tags(p)["title"] == "Prêt"
+
+
+def test_old_cache_with_bad_titles_is_dropped(tmp_path):
+    import json
+    p = str(write(tmp_path / "a.wav"))
+    import os
+    st = os.stat(p)
+    (tmp_path / "tags.json").write_text(json.dumps({p: [st.st_size, int(st.st_mtime), "Pr�t", "", 0.1]}))
+    assert library.TagCache(tmp_path / "tags.json").get(p) is None  # ancien format : ignoré
+    c = library.TagCache(tmp_path / "tags.json", "auto")
+    c.put(p, {"title": "Prêt", "comment": "", "duration": 0.1})
+    c.save()
+    assert library.TagCache(tmp_path / "tags.json", "auto").get(p)["title"] == "Prêt"
+    assert library.TagCache(tmp_path / "tags.json", "cp1251").get(p) is None  # autre encodage : relu
+
+
+def test_api_tag_encoding_setting(tmp_path, monkeypatch):
+    a, root = make_api(tmp_path, monkeypatch)
+    add_info_chunk(write(root / "Mes sons" / "ru.wav"), INAM="Привет".encode("cp1251"))
+    a._measure([root / "Mes sons" / "ru.wav"])
+    assert a.devices()["tag_encoding"] == "auto"
+    assert a.set_tag_encoding("cp1251") == {"ok": True}
+    for _ in range(100):
+        if a.search("ru", "Mes sons")["results"][0]["name"] == "Привет":
+            break
+        time.sleep(0.02)
+    assert a.search("ru", "Mes sons")["results"][0]["name"] == "Привет"
+    assert "error" in a.set_tag_encoding("n'importe quoi")

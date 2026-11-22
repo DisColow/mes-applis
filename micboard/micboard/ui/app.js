@@ -612,6 +612,9 @@ async function openSettings() {
       <label class="lbl">Tout arrêter</label>
       <div class="toggle-row"><span>${d.stop_hotkey ? `<kbd>${esc(d.stop_hotkey)}</kbd>` : `<span class="muted">Échap dans MicBoard · aucun raccourci global</span>`}</span>
         <button class="secondary small" id="stop-key" type="button">${icon("key")}Définir</button></div>
+      <label class="lbl">Texte des métadonnées</label><select id="tag-enc">${(d.tag_encodings || []).map((e) =>
+        `<option value="${esc(e.id)}" ${e.id === d.tag_encoding ? "selected" : ""}>${esc(e.label)}</option>`).join("")}</select>
+      <span class="hint">Si des accents s'affichent mal dans les noms des sons (« Pr�t », « Ã© »), choisis l'encodage de tes fichiers.</span>
       <label class="lbl">Dossier des sons</label>
       <div class="toggle-row"><span class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.sounds_root)}</span>
         <span style="display:flex;gap:6px"><button class="secondary small" id="root-open" type="button">Ouvrir</button><button class="secondary small" id="root-change" type="button">Changer…</button></span></div>
@@ -628,6 +631,10 @@ async function openSettings() {
     api.set_mix("exclusive", on);
   });
   $("#stop-key").addEventListener("click", () => openHotkey(null));
+  $("#tag-enc").addEventListener("change", async (e) => {
+    await api.set_tag_encoding(e.target.value);
+    toast("Les noms des sons vont être relus avec cet encodage…");
+  });
   $("#root-open").addEventListener("click", () => api.open_folder());
   $("#root-change").addEventListener("click", async () => {
     await api.change_root();

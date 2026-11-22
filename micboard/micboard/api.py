@@ -47,7 +47,7 @@ class Api:
         self._favorites: list[str] = self._cfg.get("favorites", [])
         self._durations: dict[str, float] = {}
         self._tags: dict[str, dict] = {}  # chemin -> {"title", "comment", "duration"}
-        self._tag_cache = library.TagCache(self._cfg_file.parent / "tags.json")
+        self._tag_cache = library.TagCache(self._cfg_file.parent / "tags.json", self._tag_encoding())
         self._lib_version = 0             # change quand des noms arrivent des métadonnées
         self._scan_id = 0
         self._disk: dict[str, DiskSearch] = {}
@@ -116,6 +116,21 @@ class Api:
                          daemon=True).start()
         return self.categories()
 
+    def _tag_encoding(self) -> str:
+        enc = self._cfg.get("tag_encoding", "auto")
+        return enc if enc in library.TAG_ENCODINGS else "auto"
+
+    def set_tag_encoding(self, encoding: str) -> dict:
+        """Change l'encodage des balises non UTF-8 : le cache est vidé et tout est relu."""
+        if encoding not in library.TAG_ENCODINGS:
+            return {"error": "Encodage inconnu"}
+        self._cfg["tag_encoding"] = encoding
+        self._save()
+        self._tags.clear()
+        self._tag_cache = library.TagCache(self._cfg_file.parent / "tags.json", encoding)
+        self.rescan()
+        return {"ok": True}
+
     def _apply_tags(self, key: str, tags: dict) -> bool:
         self._tags[key] = tags
         self._durations[key] = tags.get("duration") or 0.0
@@ -129,7 +144,7 @@ class Api:
             if scan_id != self._scan_id:  # une nouvelle analyse a été lancée entre-temps
                 return
             key = str(f)
-            tags = library.read_tags(key)
+            tags = library.read_tags(key, self._tag_cache.encoding)
             self._tag_cache.put(key, tags)
             changed += self._apply_tags(key, tags)
             if changed and i % 100 == 99:  # l'interface se met à jour par paquets
@@ -141,7 +156,7 @@ class Api:
 
     def _measure(self, files: list[Path]) -> None:  # utilisé par les outils de test
         for f in files:
-            self._apply_tags(str(f), library.read_tags(f))
+            self._apply_tags(str(f), library.read_tags(f, self._tag_encoding()))
 
     def categories(self) -> list[dict]:
         counts = self._index.categories()
@@ -318,7 +333,9 @@ class Api:
                "monitor": pick(self._cfg.get("monitor"), outputs)}
         return {"apis": apis, "inputs": inputs, "outputs": outputs, "selected": sel,
                 "cable_found": any("cable" in n.lower() for n in outputs), **self._mix_cfg(),
-                "stop_hotkey": self._cfg.get("stop_hotkey", ""), "sounds_root": str(self._root)}
+                "stop_hotkey": self._cfg.get("stop_hotkey", ""), "sounds_root": str(self._root),
+                "tag_encoding": self._tag_encoding(),
+                "tag_encodings": [{"id": k, "label": v} for k, v in library.TAG_ENCODINGS.items()]}
 
     def set_device(self, key: str, value: str) -> dict:
         if key in ("host_api", "mic", "cable", "monitor"):
@@ -413,7 +430,7 @@ class Api:
         for s in self._disk.values():
             s.cancel()
         sid = uuid.uuid4().hex
-        self._disk = {sid: DiskSearch(roots, query).start()}
+        self._disk = {sid: DiskSearch(roots, query, encoding=self._tag_encoding()).start()}
         return sid
 
     def disk_poll(self, sid: str, since: int = 0) -> dict:
