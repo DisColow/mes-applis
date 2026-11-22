@@ -9,45 +9,83 @@ const icon = (id) => `<svg><use href="#i-${id}"/></svg>`;
 const fold = (s) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 const S = {
-  view: "all",          // all | favorites | cat:<nom> | disk
+  view: "browse",       // browse | favorites | disk
+  folder: "",           // dossier affiché, relatif à la bibliothèque (« » = racine)
   query: "",
   limit: 240,
-  results: [],
+  results: [],          // sons affichés (contenu du dossier ou résultats de recherche)
   total: 0,
   cats: [],
+  tree: [],
+  open: new Set(),      // dossiers dépliés dans l'arbre
   sel: -1,
   running: false,
   mix: {},
   disk: { sid: null, since: 0, rows: [], timer: null, roots: [], on: new Set() },
 };
+try { S.open = new Set(JSON.parse(localStorage.getItem("micboard.open") || "[]")); } catch { /* stockage indisponible */ }
+const saveOpen = () => { try { localStorage.setItem("micboard.open", JSON.stringify([...S.open])); } catch { /* idem */ } };
 
 /* ------------------------------------------------------------------ démarrage */
 async function init() {
-  S.cats = await api.categories();
-  renderNav();
+  await refreshTree();
   const dev = await api.devices();
   applyMix(dev);
-  await search();
+  await load();
   setInterval(pollStatus, 110);
   if (await api.first_run()) openHelp();
 }
 if (window.pywebview && window.pywebview.api) init();
 else window.addEventListener("pywebviewready", init, { once: true });
 
-/* ------------------------------------------------------------------ navigation */
+/* ------------------------------------------------------------------ arborescence */
+const topOf = (rel) => (rel || "").split("/")[0];
 const catOf = (name) => S.cats.find((c) => c.name === name) || { color: "#8b6cff", icon: "folder", short: name };
+const leaf = (rel) => (rel ? rel.split("/").pop() : "Bibliothèque");
+const parentOf = (rel) => rel.split("/").slice(0, -1).join("/");
+const plural = (n, word) => `${n.toLocaleString("fr-FR")} ${word}${n > 1 ? "s" : ""}`;
 
-function renderNav() {
-  $("#nav-cats").innerHTML = S.cats.map((c) => `
-    <button class="nav-item" data-view="cat:${esc(c.name)}" type="button" style="--c:${c.color}">
-      <span class="cat-ico">${icon(c.icon)}</span><span>${esc(c.name)}</span><em>${c.count}</em>
-    </button>`).join("");
-  $("#count-all").textContent = S.cats.reduce((n, c) => n + c.count, 0);
+async function refreshTree() {
+  [S.cats, S.tree] = await Promise.all([api.categories(), api.tree()]);
+  renderTree();
+}
+
+function renderTree() {
+  const total = S.tree.reduce((n, t) => n + t.count, 0);
+  const node = (t, d) => {
+    const c = catOf(topOf(t.rel));
+    const kids = t.children.length;
+    const open = kids && S.open.has(t.rel);
+    return `<button class="tnode${d === 0 ? " top" : ""}${open ? " open" : ""}" style="--d:${d};--c:${c.color}"
+        data-rel="${esc(t.rel)}" title="${esc(t.rel)}" type="button">
+      <span class="tw${kids ? "" : " leaf"}" data-tw>${icon("chevron")}</span>
+      <span class="ti">${icon(d === 0 ? c.icon : "folder-fill")}</span>
+      <span class="tl">${esc(t.name)}</span><em>${t.count}</em>
+    </button>${open ? `<div class="tchildren" style="--d:${d}">${t.children.map((k) => node(k, d + 1)).join("")}</div>` : ""}`;
+  };
+  $("#tree").innerHTML = `<button class="tnode root" style="--d:0" data-rel="" type="button">
+      <span class="tw leaf">${icon("chevron")}</span><span class="ti">${icon("grid")}</span>
+      <span class="tl">Tous les sons</span><em>${total}</em></button>` + S.tree.map((t) => node(t, 0)).join("");
   markNav();
 }
+
 function markNav() {
   $$(".nav-item[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === S.view));
+  $$(".tnode").forEach((b) => b.classList.toggle("active", S.view === "browse" && b.dataset.rel === S.folder));
+  $(".tnode.active")?.scrollIntoView({ block: "nearest" });
 }
+
+$("#tree").addEventListener("click", (e) => {
+  const n = e.target.closest(".tnode");
+  if (!n) return;
+  const rel = n.dataset.rel;
+  if (e.target.closest("[data-tw]") && !e.target.closest(".leaf")) {   // flèche : plier / déplier seulement
+    S.open.has(rel) ? S.open.delete(rel) : S.open.add(rel);
+    saveOpen(); renderTree();
+    return;
+  }
+  openFolder(rel);
+});
 
 $("#nav").addEventListener("click", (e) => {
   const b = e.target.closest(".nav-item");
@@ -58,67 +96,122 @@ $("#nav").addEventListener("click", (e) => {
 
 function setView(view) {
   S.view = view;
-  markNav();
   const disk = view === "disk";
   $("#view-library").hidden = disk;
   $("#view-disk").hidden = !disk;
+  markNav();
   if (disk) { initDisk(); $("#dq").focus(); return; }
   S.limit = 240;
-  search();
+  load();
   $("#lib-scroll").scrollTop = 0;
 }
 
-/* ------------------------------------------------------------------ recherche dans la bibliothèque */
+/** Ouvre un dossier : le déplie dans l'arbre avec tous ses parents, et affiche son contenu. */
+function openFolder(rel) {
+  const parts = rel ? rel.split("/") : [];
+  parts.forEach((_p, i) => S.open.add(parts.slice(0, i + 1).join("/")));
+  saveOpen();
+  S.folder = rel;
+  S.view = "browse";
+  if (S.query) { S.query = ""; $("#q").value = ""; }
+  $("#view-library").hidden = false;
+  $("#view-disk").hidden = true;
+  renderTree();
+  S.limit = 400;
+  load();
+  $("#lib-scroll").scrollTop = 0;
+}
+
+/* ------------------------------------------------------------------ contenu : dossier ou recherche */
 let searchTimer = null;
-let searchSeq = 0;
+let loadSeq = 0;
 $("#q").addEventListener("input", (e) => {
   S.query = e.target.value;
   S.limit = 240;
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(search, 90);
+  searchTimer = setTimeout(load, 90);
 });
 
-async function search() {
-  const seq = ++searchSeq;
-  const cat = S.view.startsWith("cat:") ? S.view.slice(4) : "";
-  const r = await api.search(S.query, cat, S.view === "favorites", S.limit);
-  if (seq !== searchSeq) return; // une frappe plus récente a déjà relancé
-  S.results = r.results;
-  S.total = r.total;
-  S.sel = S.query && S.results.length ? 0 : -1;
-  $("#count-fav").textContent = S.view === "favorites" && !S.query ? r.total : (await api.favorites()).length;
-  renderHeading(r);
-  await renderFavStrip();
-  renderGrid();
-}
-
-function renderHeading(r) {
-  const h = $("#lib-title"), sub = $("#lib-sub"), acts = $("#lib-actions");
-  acts.innerHTML = "";
-  if (S.view.startsWith("cat:")) {
-    const c = catOf(S.view.slice(4));
-    h.innerHTML = `<span class="cat-ico" style="--c:${c.color}">${icon(c.icon)}</span>${esc(c.name)}`;
-    acts.innerHTML = `<button class="secondary small" data-action="random-cat">${icon("dice")}Au hasard</button>
-                      <button class="secondary small" data-action="open-cat">${icon("folder")}Ouvrir le dossier</button>`;
-  } else {
-    h.textContent = S.view === "favorites" ? "Favoris" : "Tous les sons";
-    acts.innerHTML = `<button class="secondary small" data-action="import">${icon("download")}Importer</button>`;
-  }
-  const n = r.total.toLocaleString("fr-FR");
-  sub.textContent = S.query
-    ? (r.total ? `${n} résultat${r.total > 1 ? "s" : ""} pour « ${S.query} » · Entrée pour jouer le premier`
-               : `Aucun résultat pour « ${S.query} »`)
-    : `${n} son${r.total > 1 ? "s" : ""}`;
-}
-
-async function renderFavStrip() {
-  const strip = $("#fav-strip");
-  if (S.view !== "all" || S.query) { strip.innerHTML = ""; return; }
+async function load() {
+  const seq = ++loadSeq;
   const favs = await api.favorites();
+  let data;
+  if (S.view === "favorites" || S.query) {
+    const scope = S.view === "favorites" ? "" : S.folder;
+    data = await api.search(S.query, scope, S.view === "favorites", S.limit);
+    data.mode = "search";
+  } else {
+    data = await api.browse(S.folder, S.limit);
+    data.mode = "browse";
+    data.results = data.files;
+    if (data.rel !== S.folder) { S.folder = data.rel; markNav(); } // dossier disparu entre-temps
+  }
+  if (seq !== loadSeq) return; // une frappe plus récente a déjà relancé
+  S.results = data.results;
+  S.total = data.total;
+  S.sel = S.query && S.results.length ? 0 : -1;
+  $("#count-fav").textContent = favs.length;
+  renderCrumbs();
+  renderHeading(data);
+  renderFavStrip(data.mode === "browse" && !S.folder ? favs : []);
+  renderFolders(data.mode === "browse" ? data.folders : []);
+  renderGrid(data);
+}
+
+function renderCrumbs() {
+  const el = $("#crumbs");
+  if (S.view === "favorites") { el.innerHTML = ""; return; }
+  const parts = S.folder ? S.folder.split("/") : [];
+  const items = [{ name: "Bibliothèque", rel: "" }, ...parts.map((p, i) => ({ name: p, rel: parts.slice(0, i + 1).join("/") }))];
+  el.innerHTML = `<button class="up" data-goto="${esc(parentOf(S.folder))}" title="Dossier parent (Retour arrière)" type="button" ${S.folder ? "" : "disabled"}>${icon("up")}</button>` +
+    items.map((it, i) => {
+      const last = i === items.length - 1;
+      return `${i ? `<svg class="sep-ch"><use href="#i-chevron"/></svg>` : ""}<button class="${last ? "cur" : ""}" data-goto="${esc(it.rel)}" type="button">${i === 0 ? icon("grid") : ""}<span>${esc(it.name)}</span></button>`;
+    }).join("");
+}
+$("#crumbs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-goto]");
+  if (b && !b.disabled && !b.classList.contains("cur")) openFolder(b.dataset.goto);
+});
+
+function renderHeading(d) {
+  const h = $("#lib-title"), sub = $("#lib-sub"), acts = $("#lib-actions");
+  if (S.view === "favorites") {
+    h.textContent = "Favoris";
+    sub.textContent = S.query ? `${plural(d.total, "résultat")} pour « ${S.query} »` : plural(d.total, "son");
+    acts.innerHTML = "";
+    return;
+  }
+  const c = catOf(topOf(S.folder));
+  h.innerHTML = S.folder
+    ? `<span class="cat-ico" style="--c:${c.color}">${icon(S.folder.includes("/") ? "folder-fill" : c.icon)}</span>${esc(leaf(S.folder))}`
+    : "Tous les sons";
+  const where = S.folder ? `dans « ${esc(leaf(S.folder))} »` : "dans toute la bibliothèque";
+  if (d.mode === "search") {
+    sub.innerHTML = d.total
+      ? `${plural(d.total, "résultat")} pour « ${esc(S.query)} » ${where} · Entrée pour jouer le premier`
+      : `Aucun résultat pour « ${esc(S.query)} » ${where}`;
+    if (S.folder) sub.innerHTML += ` · <button class="link scope" data-action="search-all" type="button">chercher partout</button>`;
+  } else {
+    const bits = [];
+    if (d.folders.length) bits.push(plural(d.folders.length, "dossier"));
+    bits.push(S.folder ? `${plural(d.count, "son")} au total` : plural(d.count, "son"));
+    if (S.folder && d.folders.length && d.total) bits.push(`${d.total} ici`);
+    sub.textContent = bits.join(" · ");
+  }
+  acts.innerHTML = `
+    <button class="secondary small" data-action="import-folder" title="Copier un dossier du PC ici, avec tous ses sous-dossiers" type="button">${icon("folder-plus")}Importer un dossier</button>
+    <button class="secondary small" data-action="add-files" type="button">${icon("plus")}Fichiers</button>
+    <button class="secondary small" data-action="random" title="Un son au hasard dans ce dossier" type="button">${icon("dice")}</button>
+    <button class="secondary small" data-action="open-here" title="Ouvrir dans l'Explorateur" type="button">${icon("folder")}</button>`;
+}
+
+function renderFavStrip(favs) {
+  const strip = $("#fav-strip");
   if (!favs.length) { strip.innerHTML = ""; return; }
   strip.innerHTML = `<div class="pads-title">Favoris</div>` + favs.slice(0, 18).map((f) => {
     const c = catOf(f.category);
-    return `<button class="pad" style="--c:${c.color}" data-path="${esc(f.path)}" title="${esc(f.file)}" type="button">
+    return `<button class="pad" style="--c:${c.color}" data-path="${esc(f.path)}" title="${esc(f.dir)}/${esc(f.file)}" type="button">
       <b>${esc(f.name)}</b>
       <span class="pad-foot"><span>${esc(c.short)}</span>${f.hotkey ? `<kbd>${esc(f.hotkey)}</kbd>` : ""}</span>
     </button>`;
@@ -127,6 +220,24 @@ async function renderFavStrip() {
 $("#fav-strip").addEventListener("click", (e) => {
   const p = e.target.closest(".pad");
   if (p) play(p.dataset.path);
+});
+
+function renderFolders(folders) {
+  const el = $("#folders");
+  el.classList.toggle("big", !S.folder);
+  if (!folders.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="section-title">${S.folder ? "Dossiers" : "Catégories"}</div>` + folders.map((f, i) => {
+    const c = catOf(topOf(f.rel));
+    const ic = S.folder ? "folder-fill" : c.icon;
+    const info = [plural(f.count, "son"), f.subfolders ? plural(f.subfolders, "dossier") : ""].filter(Boolean).join(" · ");
+    return `<button class="ftile" style="--c:${c.color};animation-delay:${Math.min(i, 20) * 10}ms" data-goto="${esc(f.rel)}" title="${esc(f.rel)}" type="button">
+      <span class="fi">${icon(ic)}</span><div><b>${esc(f.name)}</b><small>${info}</small></div>
+      <svg class="go"><use href="#i-chevron"/></svg></button>`;
+  }).join("");
+}
+$("#folders").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-goto]");
+  if (t) openFolder(t.dataset.goto);
 });
 
 function highlight(text) {
@@ -148,54 +259,62 @@ function highlight(text) {
 
 const fmtDur = (d) => (d == null ? "" : d < 60 ? `${d.toFixed(1).replace(".", ",")} s` : `${Math.floor(d / 60)} min ${Math.round(d % 60)} s`);
 
-function cardHTML(r, i) {
+/** Chemin du dossier d'un son, vu depuis le dossier affiché (« » s'il est dedans directement). */
+function relFromHere(dir) {
+  if (S.view === "favorites" || !S.folder) return dir;
+  return dir === S.folder ? "" : dir.slice(S.folder.length + 1);
+}
+
+function cardHTML(r, i, showPath) {
   const c = catOf(r.category);
-  const folder = r.folder ? r.folder.split("/").pop() : "";
+  const where = showPath ? relFromHere(r.dir) : "";
+  const pathHTML = where
+    ? `<span>·</span><span class="folder goto" data-act="goto" title="Aller dans ${esc(r.dir)}">${highlight(where.split("/").slice(-2).join(" › "))}</span>`
+    : "";
   return `<div class="card${i === S.sel ? " sel" : ""}" style="--c:${c.color};animation-delay:${Math.min(i, 30) * 8}ms"
-              data-i="${i}" data-path="${esc(r.path)}" title="${esc(r.file)}" tabindex="-1">
+              data-i="${i}" data-path="${esc(r.path)}" title="${esc(r.dir)}/${esc(r.file)}" tabindex="-1">
     <span class="play">${icon("play")}</span>
     <div class="info">
       <div class="name">${highlight(r.name)}</div>
-      <div class="meta"><span class="tag">${esc(c.short)}</span>${folder ? `<span>·</span><span class="folder">${highlight(folder)}</span>` : ""}${r.duration ? `<span>·</span><span>${fmtDur(r.duration)}</span>` : ""}</div>
+      <div class="meta"><span class="tag">${esc(showPath && !S.folder || S.view === "favorites" ? c.short : r.file.split(".").pop().toUpperCase())}</span>${pathHTML}${r.duration ? `<span>·</span><span>${fmtDur(r.duration)}</span>` : ""}</div>
     </div>
     <div class="badges">${r.hotkey ? `<kbd>${esc(r.hotkey)}</kbd>` : ""}${r.favorite ? `<svg class="star"><use href="#i-star"/></svg>` : ""}</div>
     <div class="acts">
       <button data-act="preview" title="Écouter dans mon casque seulement (Maj+Entrée)" type="button">${icon("headphones")}</button>
       <button data-act="fav" class="${r.favorite ? "fav-on" : ""}" title="${r.favorite ? "Retirer des favoris" : "Ajouter aux favoris"}" type="button">${icon(r.favorite ? "star" : "star-o")}</button>
       <button data-act="hotkey" title="Raccourci clavier" type="button">${icon("key")}</button>
-      <button data-act="folder" title="Ouvrir le dossier" type="button">${icon("folder")}</button>
+      <button data-act="folder" title="Ouvrir dans l'Explorateur" type="button">${icon("folder")}</button>
     </div>
     <span class="bar"></span>
   </div>`;
 }
 
-function renderGrid() {
+function renderGrid(d) {
   const grid = $("#grid");
   const empty = $("#lib-empty");
-  const groups = S.view === "all" && !S.query;
-  let html = "", last = null;
-  S.results.forEach((r, i) => {
-    if (groups && r.category !== last) {
-      last = r.category;
-      const c = catOf(r.category);
-      html += `<div class="group-title" style="color:${c.color}">${esc(r.category)}</div>`;
-    }
-    html += cardHTML(r, i);
-  });
-  grid.innerHTML = html;
+  const showPath = d.mode === "search";
+  const title = d.mode === "browse" && S.results.length && d.folders.length ? `<div class="section-title">Sons</div>` : "";
+  grid.innerHTML = title + S.results.map((r, i) => cardHTML(r, i, showPath)).join("");
   $("#more").hidden = S.results.length >= S.total;
-  empty.hidden = S.results.length > 0;
-  if (!S.results.length) empty.innerHTML = emptyHTML();
+  const nothing = !S.results.length && !(d.mode === "browse" && d.folders.length);
+  empty.hidden = !nothing;
+  if (nothing) empty.innerHTML = emptyHTML(d);
 }
-$("#more").addEventListener("click", () => { S.limit += 240; search(); });
+$("#more").addEventListener("click", () => { S.limit += 400; load(); });
 
-function emptyHTML() {
+function emptyHTML(d) {
   if (S.query) return `<div class="empty-art">${icon("search")}</div><h2>Rien trouvé</h2>
-    <p class="muted">Essaie un autre mot, ou cherche ce son <button class="link" data-action="disk-with-query">sur ton PC</button>.</p>`;
+    <p class="muted">Essaie un autre mot${S.folder ? `, <button class="link" data-action="search-all" type="button">cherche dans toute la bibliothèque</button>` : ""}
+    ou cherche ce son <button class="link" data-action="disk-with-query" type="button">sur ton PC</button>.</p>`;
   if (S.view === "favorites") return `<div class="empty-art">${icon("star-o")}</div><h2>Pas encore de favoris</h2>
     <p class="muted">Clique sur l'étoile d'un son pour l'avoir toujours sous la main, en gros bouton.</p>`;
+  if (S.folder) return `<div class="empty-art">${icon("folder")}</div><h2>Ce dossier est vide</h2>
+    <p class="muted">Importe un dossier du PC ici (avec tous ses sous-dossiers) ou ajoute des fichiers.</p>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="primary" data-action="import-folder" type="button">${icon("folder-plus")}Importer un dossier ici</button>
+      <button class="secondary" data-action="add-files" type="button">${icon("plus")}Ajouter des fichiers</button></div>`;
   return `<div class="empty-art">${icon("music")}</div><h2>Ta bibliothèque est vide</h2>
-    <p class="muted">Importe les sons depuis tes jeux installés, ou cherche des fichiers audio sur ton PC.</p>${gamesHTML()}`;
+    <p class="muted">Importe les sons depuis tes jeux installés, ou un dossier de sons de ton PC.</p>${gamesHTML()}`;
 }
 
 /* ------------------------------------------------------------------ cartes : souris et clavier */
@@ -210,6 +329,7 @@ $("#grid").addEventListener("click", (e) => {
   if (act === "fav") return toggleFav(r);
   if (act === "hotkey") return openHotkey(r);
   if (act === "folder") return api.open_folder(r.path);
+  if (act === "goto") return openFolder(r.dir);
 });
 
 function select(i, scroll = true) {
@@ -235,9 +355,12 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault(); $("#q").focus(); $("#q").select(); return;
   }
   if (e.key === "Escape") {
-    if (inSearch && S.query) { $("#q").value = ""; S.query = ""; search(); }
+    if (inSearch && S.query) { $("#q").value = ""; S.query = ""; load(); }
     else { api.stop(); $("#q").blur(); }
     return;
+  }
+  if (!inSearch && S.view === "browse" && S.folder && (e.key === "Backspace" || (e.altKey && e.key === "ArrowLeft"))) {
+    e.preventDefault(); openFolder(parentOf(S.folder)); return;
   }
   const cols = gridColumns();
   const moves = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols };
@@ -268,7 +391,7 @@ async function preview(path) {
 async function toggleFav(r) {
   r.favorite = await api.toggle_favorite(r.path);
   toast(r.favorite ? `« ${r.name} » ajouté aux favoris` : `« ${r.name} » retiré des favoris`);
-  search();
+  load();
 }
 
 const byPath = () => new Map(S.results.map((r) => [r.path, r]));
@@ -358,18 +481,37 @@ document.addEventListener("click", async (e) => {
   else if (act === "import") openImport();
   else if (act === "close") closeModal();
   else if (act === "stop") api.stop();
-  else if (act === "random" || act === "random-cat") {
-    const cat = S.view.startsWith("cat:") ? S.view.slice(4) : "";
-    const r = await api.random_sound(cat);
-    if (!r) toast("Aucun son dans la bibliothèque", "err");
+  else if (act === "random") {
+    const r = await api.random_sound(S.view === "browse" ? S.folder : "");
+    if (!r) toast("Aucun son dans ce dossier", "err");
     else if (!S.running) toast("Active le micro pour envoyer les sons", "err");
-  } else if (act === "open-cat") api.open_folder(await categoryPath(S.view.slice(4)));
+  } else if (act === "open-here") api.open_folder((await api.browse(S.folder, 0)).path);
+  else if (act === "search-all") { const q = S.query; openFolder(""); S.query = q; $("#q").value = q; load(); }
+  else if (act === "import-folder") importFolder(S.view === "browse" ? S.folder : "");
+  else if (act === "add-files") addFilesHere();
   else if (act === "disk-with-query") { $("#dq").value = S.query; setView("disk"); }
   else if (a.dataset.game) importGame(a.dataset.game, a.dataset.voices !== "0");
 });
-async function categoryPath(name) {
-  const dev = await api.devices();
-  return `${dev.sounds_root}${dev.sounds_root.includes("\\") ? "\\" : "/"}${name}`;
+
+/** Libellé lisible d'un dossier de destination. */
+const destLabel = (rel) => (rel ? `« ${leaf(rel)} »` : "une nouvelle catégorie");
+
+async function afterImport(r, what) {
+  if (r.cancelled) return false;
+  if (r.error) { toast(`Import impossible : ${r.error}`, "err"); return false; }
+  toast(`${plural(r.added, "son")} ${what} 🎉`, "ok");
+  await refreshTree();
+  if (r.rel) openFolder(r.rel); else load();
+  return true;
+}
+async function importFolder(dest) {
+  toast(`Choisis le dossier à copier dans ${destLabel(dest)}, avec tous ses sous-dossiers…`);
+  if (await afterImport(await api.import_folder(dest), "importés avec leur arborescence")) closeModal();
+}
+async function addFilesHere() {
+  const dest = S.view === "browse" && S.folder ? S.folder : "Mes sons";
+  const r = await api.pick_files(dest);
+  if (await afterImport(r, `ajoutés dans « ${leaf(dest)} »`)) openFolder(dest);
 }
 $("#modal").addEventListener("mousedown", (e) => { if (e.target.id === "modal") closeModal(); });
 
@@ -418,7 +560,11 @@ function openImport() {
   openModal(`<h2>Importer depuis mes jeux</h2>
     <p class="muted">Les sons sont copiés depuis tes jeux installés vers ta bibliothèque MicBoard.</p>
     ${gamesHTML()}
-    <div class="modal-actions"><button class="secondary" data-game="files" type="button">${icon("plus")}Ajouter mes propres fichiers…</button></div>`);
+    <div class="modal-actions">
+      <button class="secondary" data-game="files" type="button">${icon("plus")}Ajouter des fichiers…</button>
+      <button class="primary" data-action="import-folder" type="button">${icon("folder-plus")}Importer un dossier dans ${esc(destLabel(S.view === "browse" ? S.folder : ""))}</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0;text-align:right">Le dossier est copié avec tous ses sous-dossiers, et reste navigable tel quel.</p>`);
 }
 async function importGame(game, voices) {
   toast("Choisis l'emplacement dans la fenêtre qui s'ouvre…");
@@ -426,10 +572,10 @@ async function importGame(game, voices) {
   if (r.cancelled) return;
   if (r.error) { toast(`Import impossible : ${r.error}`, "err"); return; }
   closeModal();
-  toast(`${r.added} son${r.added > 1 ? "s" : ""} importé${r.added > 1 ? "s" : ""} 🎉`, "ok");
-  S.cats = await api.categories();
-  renderNav();
-  search();
+  toast(`${plural(r.added, "son")} importé${r.added > 1 ? "s" : ""} 🎉`, "ok");
+  await refreshTree();
+  const target = { et: "Wolfenstein Enemy Territory", css: "Counter-Strike Source", wc3: "Warcraft III - Paysans", files: "Mes sons" }[game];
+  openFolder(target || "");
 }
 
 /* réglages */
@@ -474,7 +620,7 @@ async function openSettings() {
   $("#root-open").addEventListener("click", () => api.open_folder());
   $("#root-change").addEventListener("click", async () => {
     await api.change_root();
-    S.cats = await api.categories(); renderNav(); search(); openSettings();
+    await refreshTree(); openFolder(""); openSettings();
   });
 }
 
@@ -503,7 +649,7 @@ function openHotkey(r) {
   hotkeyCapture = { combo: "" };
   const save = async (combo) => {
     if (forStop) { await api.set_stop_hotkey(combo); S.mix.stop_hotkey = combo; closeModal(); openSettings(); }
-    else { await api.set_hotkey(r.path, combo); closeModal(); search(); }
+    else { await api.set_hotkey(r.path, combo); closeModal(); load(); }
     toast(combo ? `Raccourci « ${combo} » enregistré` : "Raccourci supprimé", "ok");
   };
   $("#hk-save").addEventListener("click", () => save(hotkeyCapture.combo));
@@ -544,12 +690,25 @@ function openHelp() {
 
 /* ------------------------------------------------------------------ recherche sur le PC */
 async function initDisk() {
+  fillDestSelect();
   if (S.disk.roots.length) return;
   S.disk.roots = await api.disk_roots();
   S.disk.on = new Set([S.disk.roots[0].path]);
   renderRoots();
-  const cats = await api.categories();
-  $("#disk-cat").innerHTML = cats.map((c) => `<option ${c.name === "Mes sons" ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+}
+/** Liste de destination : tous les dossiers de la bibliothèque, en arbre. */
+function fillDestSelect() {
+  const sel = $("#disk-cat");
+  const keep = sel.value || (S.folder || "Mes sons");
+  const opts = [`<option value="">Nouvelle catégorie (dossier importé)</option>`];
+  const walk = (nodes, d) => nodes.forEach((t) => {
+    opts.push(`<option value="${esc(t.rel)}">${"   ".repeat(d)}${d ? "└ " : ""}${esc(t.name)}</option>`);
+    walk(t.children, d + 1);
+  });
+  walk(S.tree, 0);
+  sel.innerHTML = opts.join("");
+  sel.value = [...sel.options].some((o) => o.value === keep) ? keep : "Mes sons";
+  sel.title = "Où ranger les sons dans ta bibliothèque";
 }
 function renderRoots() {
   $("#roots").innerHTML = S.disk.roots.map((r) => `
@@ -617,8 +776,9 @@ async function pollDisk() {
         <div class="path" title="${esc(f.folder)}">‎${esc(f.folder)}</div>
         <div class="size">${fmtSize(f.size)}</div>
         <div class="acts">
-          <button data-dact="add" title="Ajouter à la bibliothèque" type="button">${icon("plus")}</button>
-          <button data-dact="folder" title="Ouvrir le dossier" type="button">${icon("folder")}</button>
+          <button data-dact="add" title="Ajouter ce son à la bibliothèque" type="button">${icon("plus")}</button>
+          <button data-dact="import-dir" title="Importer tout son dossier, avec ses sous-dossiers" type="button">${icon("folder-plus")}</button>
+          <button data-dact="folder" title="Ouvrir dans l'Explorateur" type="button">${icon("folder")}</button>
         </div>
       </div>`).join("");
     $("#disk-list").append(frag.content);
@@ -649,6 +809,7 @@ $("#disk-list").addEventListener("click", async (e) => {
   if (act === "preview") preview(f.path);
   else if (act === "folder") api.open_folder(f.path);
   else if (act === "add") addDisk([f.path], [row]);
+  else if (act === "import-dir") importDiskFolder(f.folder);
   updateDiskSel();
 });
 $("#disk-list").addEventListener("dblclick", (e) => {
@@ -670,11 +831,24 @@ $("#disk-add").addEventListener("click", () => {
   addDisk(rows.map((r) => S.disk.rows[+r.dataset.k].path), rows);
 });
 async function addDisk(paths, rows) {
-  const cat = $("#disk-cat").value;
-  const r = await api.add_files(paths, cat);
+  const dest = $("#disk-cat").value || "Mes sons";   // des fichiers seuls ne créent pas de catégorie
+  const r = await api.add_files(paths, dest);
   rows.forEach((row) => { row.classList.add("in-lib"); $("input", row).checked = false; });
   updateDiskSel();
-  toast(r.added ? `${r.added} son${r.added > 1 ? "s" : ""} ajouté${r.added > 1 ? "s" : ""} à « ${cat} »` : "Déjà dans la bibliothèque", r.added ? "ok" : "");
-  S.cats = await api.categories();
-  renderNav();
+  toast(r.added ? `${plural(r.added, "son")} ajouté${r.added > 1 ? "s" : ""} dans « ${leaf(dest)} »` : "Déjà dans la bibliothèque", r.added ? "ok" : "");
+  await refreshTree();
+  fillDestSelect();
+}
+async function importDiskFolder(src) {
+  const dest = $("#disk-cat").value;
+  const r = await api.import_folder_path(src, dest);
+  if (r.error) { toast(`Import impossible : ${r.error}`, "err"); return; }
+  const name = r.rel.split("/").pop();
+  toast(`Dossier « ${name} » importé dans ${destLabel(dest)} : ${plural(r.added, "son")}, sous-dossiers compris`, "ok");
+  $$("#disk-list .row-file").forEach((row) => {
+    const f = S.disk.rows[+row.dataset.k];
+    if (f.folder === src || f.folder.startsWith(src + "/") || f.folder.startsWith(src + "\\")) row.classList.add("in-lib");
+  });
+  await refreshTree();
+  fillDestSelect();
 }

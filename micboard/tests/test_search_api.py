@@ -152,3 +152,40 @@ def test_api_flow(tmp_path, monkeypatch):
     assert a._mixer.sound_gain == 0.3
     a2 = apimod.Api(engine=FakeEngine(), cfg_file=tmp_path / "cfg.json")  # réglages conservés
     assert a2._mixer.sound_gain == 0.3 and a2.favorites()[0]["name"] == "Go"
+
+
+def test_api_tree_browse_and_folder_import(tmp_path, monkeypatch):
+    a, root = make_api(tmp_path, monkeypatch)
+    touch_wav(root / "Counter-Strike Source" / "bot" / "clear.wav")
+    touch_wav(root / "Counter-Strike Source" / "radio" / "roger.wav")
+    a.rescan()
+
+    tree = a.tree()
+    assert [n["name"] for n in tree][:3] == ["Wolfenstein Enemy Territory", "Warcraft III - Paysans",
+                                             "Counter-Strike Source"]
+    css = next(n for n in tree if n["name"] == "Counter-Strike Source")
+    assert css["count"] == 3 and [c["rel"] for c in css["children"]] == \
+        ["Counter-Strike Source/bot", "Counter-Strike Source/radio"]
+
+    b = a.browse("Counter-Strike Source")
+    assert [c["name"] for c in b["crumbs"]] == ["Counter-Strike Source"]
+    assert [(f["name"], f["count"]) for f in b["folders"]] == [("bot", 1), ("radio", 2)]
+    assert b["files"] == [] and b["count"] == 3
+    radio = a.browse("Counter-Strike Source/radio")
+    assert [f["name"] for f in radio["files"]] == ["Go", "Roger"]
+    assert radio["files"][0]["dir"] == "Counter-Strike Source/radio"
+
+    # la recherche se limite au dossier et à ses sous-dossiers
+    assert a.search("", "Counter-Strike Source/radio")["total"] == 2
+    assert a.search("clear", "Counter-Strike Source")["total"] == 1
+    assert a.search("clear", "Counter-Strike Source/radio")["total"] == 0
+
+    src = tmp_path / "Pack"
+    touch_wav(src / "Armes" / "Fusils" / "pan.wav")
+    touch_wav(src / "intro.wav")
+    r = a.import_folder_path(str(src), "Mes sons")
+    assert r == {"added": 2, "rel": "Mes sons/Pack"}
+    pack = a.browse("Mes sons/Pack")
+    assert [f["name"] for f in pack["folders"]] == ["Armes"] and [f["name"] for f in pack["files"]] == ["Intro"]
+    assert a.browse("Mes sons/Pack/Armes/Fusils")["files"][0]["name"] == "Pan"
+    assert "error" in a.import_folder_path(str(src), "../..")  # pas de sortie de la bibliothèque

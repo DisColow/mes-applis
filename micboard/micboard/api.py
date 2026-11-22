@@ -94,6 +94,7 @@ class Api:
             for sub in node["dirs"].values():
                 collect(sub)
         collect(tree)
+        self._tree = tree
         self._index = Index(self._root, files)
         self._favorites = [f for f in self._favorites if Path(f).exists()]
         threading.Thread(target=self._measure, args=(files,), daemon=True).start()
@@ -128,13 +129,68 @@ class Api:
     def _entry_dict(self, e) -> dict:
         key = str(e.path)
         return {"path": key, "name": e.name, "file": e.path.name, "category": e.category,
-                "folder": e.folder, "duration": self._durations.get(key),
+                "folder": e.folder, "dir": e.rel_dir, "duration": self._durations.get(key),
                 "favorite": key in self._favorites, "hotkey": self._hotkeys.get(key, "")}
 
-    def search(self, query: str = "", category: str = "", favorites: bool = False,
+    # --- arborescence ------------------------------------------------------------------
+    def _node(self, rel: str) -> dict | None:
+        node = self._tree
+        for part in [p for p in rel.split("/") if p]:
+            node = node["dirs"].get(part)
+            if node is None:
+                return None
+        return node
+
+    @staticmethod
+    def _count(node: dict) -> int:
+        return len(node["files"]) + sum(Api._count(n) for n in node["dirs"].values())
+
+    def _dest(self, rel: str) -> Path:
+        """Chemin absolu d'un dossier de la bibliothèque, sans pouvoir en sortir."""
+        target = (self._root / rel).resolve()
+        if not target.is_relative_to(self._root.resolve()):
+            raise ValueError("Dossier hors de la bibliothèque")
+        return target
+
+    def _ordered_dirs(self, node: dict, rel: str) -> list[str]:
+        names = list(node["dirs"])
+        if not rel:  # les catégories des jeux d'abord
+            return [c for c in library.DEFAULT_CATEGORIES if c in names] + \
+                   [c for c in names if c not in library.DEFAULT_CATEGORIES]
+        return names
+
+    def tree(self) -> list[dict]:
+        """Arborescence complète des dossiers, pour la barre latérale."""
+        def build(node, rel):
+            out = []
+            for name in self._ordered_dirs(node, rel):
+                sub = node["dirs"][name]
+                r = f"{rel}/{name}" if rel else name
+                out.append({"name": name, "rel": r, "count": self._count(sub), "children": build(sub, r)})
+            return out
+        return build(self._tree, "")
+
+    def browse(self, rel: str = "", limit: int = 400) -> dict:
+        """Contenu d'un dossier : fil d'Ariane, sous-dossiers et sons qu'il contient directement."""
+        node = self._node(rel)
+        if node is None:
+            rel, node = "", self._tree
+        parts = [p for p in rel.split("/") if p]
+        crumbs = [{"name": p, "rel": "/".join(parts[:i + 1])} for i, p in enumerate(parts)]
+        folders = []
+        for name in self._ordered_dirs(node, rel):
+            sub = node["dirs"][name]
+            folders.append({"name": name, "rel": f"{rel}/{name}" if rel else name,
+                            "count": self._count(sub), "subfolders": len(sub["dirs"])})
+        here = sorted((e for e in self._index.entries if e.rel_dir == rel), key=lambda e: e.name.lower())
+        return {"rel": rel, "crumbs": crumbs, "folders": folders, "total": len(here),
+                "count": self._count(node), "files": [self._entry_dict(e) for e in here[:int(limit)]],
+                "path": str(self._root / rel) if rel else str(self._root)}
+
+    def search(self, query: str = "", folder: str = "", favorites: bool = False,
                limit: int = 240) -> dict:
         only = set(self._favorites) if favorites else None
-        results, total = self._index.search(query, category or None, int(limit), only)
+        results, total = self._index.search(query, folder or None, int(limit), only)
         if favorites and not query:
             order = {p: i for i, p in enumerate(self._favorites)}
             results.sort(key=lambda e: order.get(str(e.path), 0))
@@ -153,9 +209,9 @@ class Api:
         self._save()
         return path in self._favorites
 
-    def random_sound(self, category: str = "") -> dict | None:
+    def random_sound(self, folder: str = "") -> dict | None:
         import random
-        pool = [e for e in self._index.entries if not category or e.category == category]
+        pool = [e for e in self._index.entries if Index.in_folder(e, folder)]
         if not pool:
             return None
         e = random.choice(pool)
@@ -338,10 +394,33 @@ class Api:
         for s in self._disk.values():
             s.cancel()
 
-    def add_files(self, paths: list[str], category: str = "Mes sons") -> dict:
-        n = importers.import_files(paths, self._root / (category or "Mes sons"))
+    def add_files(self, paths: list[str], folder: str = "Mes sons") -> dict:
+        n = importers.import_files(paths, self._dest(folder or "Mes sons"))
         self.rescan()
         return {"added": n}
+
+    def import_folder_path(self, src: str, folder: str = "") -> dict:
+        """Copie un dossier (et toute son arborescence) dans `folder` de la bibliothèque."""
+        try:
+            n, created = importers.import_folder(Path(src), self._dest(folder))
+        except Exception as e:
+            return {"error": str(e)}
+        self.rescan()
+        return {"added": n, "rel": created.relative_to(self._root).as_posix()}
+
+    def import_folder(self, folder: str = "") -> dict:
+        """Demande un dossier à importer dans `folder` (« » = nouvelle catégorie)."""
+        src = self._dialog("folder", str(Path.home()))
+        if not src:
+            return {"cancelled": True}
+        return self.import_folder_path(src, folder)
+
+    def pick_files(self, folder: str = "") -> dict:
+        src = self._dialog("file", "", ("Sons (*.wav;*.ogg;*.flac;*.mp3)", "Tous les fichiers (*.*)"),
+                           multiple=True)
+        if not src:
+            return {"cancelled": True}
+        return self.add_files(src, folder or "Mes sons")
 
     # --- imports depuis les jeux -----------------------------------------------------------
     def _dialog(self, kind: str, directory: str = "", file_types=(), multiple: bool = False):

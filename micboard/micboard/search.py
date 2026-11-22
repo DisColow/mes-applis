@@ -46,6 +46,7 @@ class Entry:
     name: str          # nom affiché
     category: str      # premier dossier sous la racine
     folder: str        # sous-dossier (sans la catégorie)
+    rel_dir: str = ""  # dossier complet depuis la racine, « Catégorie/sous/dossier »
     name_tokens: list[str] = field(default_factory=list)
     folder_tokens: list[str] = field(default_factory=list)
     blob: str = ""     # tout le texte collé, pour les sous-chaînes
@@ -79,7 +80,8 @@ class Index:
             parts = rel.parts[:-1]
             category = parts[0] if parts else ""
             folder = "/".join(parts[1:])
-            e = Entry(path=f, name=pretty_name(f.stem), category=category, folder=folder)
+            e = Entry(path=f, name=pretty_name(f.stem), category=category, folder=folder,
+                      rel_dir="/".join(parts))
             e.name_tokens = tokens(f.stem)
             e.folder_tokens = tokens(folder)
             e.blob = "".join(e.name_tokens)
@@ -103,14 +105,19 @@ class Index:
             total += 0.5  # « peasant yes » trouve « PeasantYes1 » en premier
         return total / len(q_tokens) - 0.002 * len(e.name_tokens)
 
-    def search(self, query: str, category: str | None = None, limit: int = 200,
+    @staticmethod
+    def in_folder(e: Entry, folder: str) -> bool:
+        """Le son est-il dans ce dossier ou un de ses sous-dossiers ? (« » = toute la bibliothèque)"""
+        return not folder or e.rel_dir == folder or e.rel_dir.startswith(folder + "/")
+
+    def search(self, query: str, folder: str | None = None, limit: int = 200,
                only: set[str] | None = None) -> tuple[list[Entry], int]:
-        """Renvoie (résultats triés, nombre total de résultats)."""
+        """Renvoie (résultats triés, nombre total de résultats), dans `folder` et ses sous-dossiers."""
         pool = [e for e in self.entries
-                if (not category or e.category == category) and (only is None or str(e.path) in only)]
+                if self.in_folder(e, folder or "") and (only is None or str(e.path) in only)]
         q_tokens = tokens(query)
         if not q_tokens:
-            pool.sort(key=lambda e: (e.category.lower(), e.folder.lower(), e.name.lower()))
+            pool.sort(key=lambda e: (e.rel_dir.lower(), e.name.lower()))
             return pool[:limit], len(pool)
         joined = "".join(q_tokens)
         scored = [(s, e) for e in pool if (s := self.score(e, q_tokens, joined)) > 0]

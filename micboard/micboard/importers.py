@@ -141,6 +141,16 @@ def wc3_worker(path: str) -> str | None:
     return None
 
 
+def _wc3_relative(rel: Path) -> Path:
+    """Garde l'arborescence du jeu à partir du dossier « units » (units/Human/Peasant/x.wav ->
+    Human/Peasant/x.wav), ou depuis le dossier choisi s'il n'y en a pas."""
+    parts = rel.parts
+    for i, part in enumerate(parts[:-1]):
+        if part.lower() == "units":
+            return Path(*parts[i + 1:])
+    return rel
+
+
 def import_wc3(folder: Path, dest: Path, workers_only: bool = True,
                progress: Progress = lambda _m: None) -> int:
     folder = Path(folder)
@@ -150,12 +160,10 @@ def import_wc3(folder: Path, dest: Path, workers_only: bool = True,
             if not is_audio(f):
                 continue
             src = Path(root) / f
-            label = wc3_worker(str(src.relative_to(folder)))
-            if label is None:
-                if workers_only:
-                    continue
-                label = "Autres"
-            target = dest / label / f
+            rel = src.relative_to(folder)
+            if workers_only and wc3_worker(str(rel)) is None:
+                continue
+            target = dest / _wc3_relative(rel)
             if not target.exists():
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, target)
@@ -163,6 +171,37 @@ def import_wc3(folder: Path, dest: Path, workers_only: bool = True,
                 if count % 50 == 0:
                     progress(f"{count} sons copiés…")
     return count
+
+
+# --- Dossiers quelconques ----------------------------------------------------------------
+def import_folder(src: Path, dest_parent: Path, progress: Progress = lambda _m: None) -> tuple[int, Path]:
+    """Copie le dossier `src` dans `dest_parent` avec toute son arborescence (seulement les sons).
+
+    Renvoie (nombre de sons copiés, dossier créé). Si le dossier existe déjà, les deux sont
+    fusionnés et les fichiers déjà présents sont gardés.
+    """
+    src = Path(src)
+    if not src.is_dir():
+        raise NotADirectoryError(f"{src} n'est pas un dossier")
+    target_root = Path(dest_parent) / (src.name or src.anchor.strip(":\\/") or "Import")
+    if target_root.resolve().is_relative_to(src.resolve()):
+        raise ValueError("Impossible d'importer un dossier dans lui-même")
+    count = 0
+    for root, dirs, files in os.walk(src):
+        dirs.sort(key=str.lower)
+        for f in files:
+            if not is_audio(f):
+                continue
+            s = Path(root) / f
+            target = target_root / s.relative_to(src)
+            if target.exists():
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(s, target)
+            count += 1
+            if count % 50 == 0:
+                progress(f"{count} sons copiés…")
+    return count, target_root
 
 
 # --- Fichiers quelconques -----------------------------------------------------------------

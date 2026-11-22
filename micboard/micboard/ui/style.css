@@ -349,3 +349,67 @@ input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); }
   input[type=range] { width: 80px; }
   .games, .help .steps { grid-template-columns: 1fr; }
 }
+
+/* ---------------- arborescence (barre latérale) ---------------- */
+.tree { display: flex; flex-direction: column; gap: 1px; }
+.tnode { display: flex; align-items: center; gap: 6px; width: 100%; height: 34px; padding: 0 8px 0 calc(4px + var(--d, 0) * 16px); border-radius: 9px; color: #c7ccd9; text-align: left; transition: background .12s, color .12s; }
+.tnode:hover { background: rgba(255, 255, 255, .04); color: var(--text); }
+.tnode.active { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.tnode .tw { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; flex: none; color: var(--faint); transition: transform .15s, background .12s; }
+.tnode .tw:hover { background: rgba(255, 255, 255, .08); color: var(--text); }
+.tnode .tw svg { width: 13px; height: 13px; }
+.tnode.open > .tw { transform: rotate(90deg); }
+.tnode .tw.leaf { visibility: hidden; }
+.tnode .ti { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: none; color: var(--c); }
+.tnode .ti svg { width: 15px; height: 15px; }
+.tnode.top .ti { background: color-mix(in srgb, var(--c) 16%, transparent); }
+.tnode:not(.top) .ti { color: color-mix(in srgb, var(--c) 70%, #8d94a8); }
+.tnode .tl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+.tnode:not(.top) .tl { font-size: 13px; }
+.tnode em { font-style: normal; font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.tnode.root .ti { color: var(--accent-2); background: rgba(34, 211, 238, .1); }
+.tchildren { display: flex; flex-direction: column; gap: 1px; position: relative; }
+.tchildren::before { content: ""; position: absolute; left: calc(14px + var(--d, 0) * 16px); top: 2px; bottom: 6px; width: 1px; background: var(--line); }
+
+/* ---------------- fil d'Ariane ---------------- */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin: 12px 0 -6px; min-height: 30px; }
+.crumbs button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 8px; color: var(--muted); font-size: 13px; max-width: 280px; }
+.crumbs button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumbs button:hover { background: rgba(255, 255, 255, .05); color: var(--text); }
+.crumbs button.cur { color: var(--text); font-weight: 600; cursor: default; }
+.crumbs button.cur:hover { background: none; }
+.crumbs button svg { width: 15px; height: 15px; }
+.crumbs .sep-ch { color: var(--faint); width: 14px; height: 14px; }
+.crumbs .up { width: 28px; padding: 0; justify-content: center; margin-right: 6px; border: 1px solid var(--line); }
+.crumbs .up:disabled { opacity: .35; cursor: default; }
+
+/* ---------------- tuiles de dossiers ---------------- */
+.section-title { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: .9px; text-transform: uppercase; margin: 0 0 -2px; }
+.section-title::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 26px; }
+.folders:empty { display: none; }
+.folders.big { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.ftile {
+  --c: var(--accent); position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--radius); text-align: left;
+  background: var(--surface); border: 1px solid var(--line);
+  transition: background .15s, border-color .15s, transform .12s; animation: in .22s ease both;
+}
+.ftile:hover { background: var(--surface-2); border-color: color-mix(in srgb, var(--c) 45%, transparent); transform: translateY(-1px); }
+.ftile .fi { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.ftile .fi svg { width: 20px; height: 20px; }
+.ftile b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ftile small { color: var(--muted); font-size: 12px; }
+.ftile > div { min-width: 0; flex: 1; }
+.ftile .go { color: var(--faint); width: 16px; height: 16px; transition: transform .15s, color .15s; }
+.ftile:hover .go { color: var(--c); transform: translateX(2px); }
+.folders.big .ftile { padding: 18px; min-height: 92px; background: linear-gradient(150deg, color-mix(in srgb, var(--c) 16%, var(--surface)) 0%, var(--surface) 65%); }
+.folders.big .ftile .fi { width: 48px; height: 48px; border-radius: 14px; }
+.folders.big .ftile .fi svg { width: 24px; height: 24px; }
+.folders.big .ftile b { font-size: 15px; }
+.ftile.drop { border-style: dashed; color: var(--muted); justify-content: center; background: none; }
+.ftile.drop:hover { color: var(--text); }
+.card .meta .goto { cursor: pointer; border-radius: 4px; }
+.card .meta .goto:hover { color: var(--text); text-decoration: underline; }
+.scope { margin-left: 6px; }
+.disk-list .row-file { grid-template-columns: 28px 40px minmax(0, 1.2fr) minmax(0, 1.6fr) 70px auto; }

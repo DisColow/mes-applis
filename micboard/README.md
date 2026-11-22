@@ -6,7 +6,7 @@ Il est prévu pour les sons de **Wolfenstein: Enemy Territory**, des **ouvriers 
 `.wav`, `.ogg`, `.flac` ou `.mp3`.
 
 > Les sons des jeux appartiennent à leurs éditeurs : ils ne sont **pas** fournis avec l'appli.
-> MicBoard les copie depuis **tes propres jeux installés** (menu *Importer*).
+> MicBoard les copie depuis **tes propres jeux installés** (*Importer depuis mes jeux*).
 
 ## Installation
 
@@ -27,12 +27,21 @@ Il est prévu pour les sons de **Wolfenstein: Enemy Territory**, des **ouvriers 
 Le bouton micro du lecteur (en bas) coupe ou rétablit ta voix ; son vumètre montre qu'elle passe.
 Les curseurs règlent séparément le volume des sons, de ta voix et du casque.
 
+### Naviguer dans les dossiers
+
+La bibliothèque est rangée en dossiers, comme sur le disque. Dans la barre latérale, l'arbre se
+déplie avec les petites flèches ; un clic sur un dossier l'ouvre. Dans la page, les sous-dossiers
+apparaissent en tuiles au-dessus des sons, et le fil d'Ariane (Bibliothèque › … › dossier) permet
+de remonter. **Retour arrière** remonte d'un dossier.
+
 ### Rechercher un son
 
 Tape dans la barre de recherche (touche **/** pour y aller) : les résultats s'affichent pendant la
 frappe. La recherche ignore les majuscules et les accents, accepte les mots dans le désordre
 (« yes peasant »), comprend les noms collés (« PeasantYes1 ») et pardonne les petites fautes
 (« peasnat »). Elle cherche aussi dans les noms de dossiers (« radio », « orc »…).
+Elle porte sur le dossier ouvert et ses sous-dossiers (« chercher partout » pour élargir) ; un clic
+sur le dossier affiché sous un résultat y emmène.
 
 | Touche | Action |
 |---|---|
@@ -45,11 +54,18 @@ Au survol d'un son : pré-écoute 🎧, favori ⭐ (gros bouton en haut de la bi
 **raccourci clavier global** ⌨ (marche même en plein jeu ; si le jeu est lancé en administrateur,
 lance MicBoard en administrateur aussi) et ouverture du dossier.
 
+### Importer un dossier
+
+**Importer un dossier** (en haut de chaque dossier, ou dans *Importer depuis mes jeux*) copie un dossier
+du PC dans le dossier ouvert, **avec tous ses sous-dossiers** : l'arborescence d'origine est gardée telle
+quelle et reste navigable. Seuls les fichiers audio sont copiés ; réimporter le même dossier ne crée
+pas de doublons. Depuis la racine de la bibliothèque, le dossier importé devient une nouvelle catégorie.
+
 ### Chercher des sons sur le PC
 
 **Chercher sur mon PC** fouille ton dossier utilisateur, tes disques ou les dossiers de ton choix à la
-recherche de fichiers audio. Écoute-les au casque, coche ceux qui te plaisent et ajoute-les à une
-catégorie de ta bibliothèque.
+recherche de fichiers audio. Écoute-les au casque, coche ceux qui te plaisent et ajoute-les au dossier
+choisi de ta bibliothèque, ou importe d'un clic tout le dossier d'un résultat avec ses sous-dossiers.
 
 ## Importer les sons
 
@@ -69,10 +85,12 @@ ou tous les sons du jeu.
   [MPQ Editor](http://www.zezula.net/en/mpq/download.html) et extrais `Units`.
 
 Puis choisis ce dossier dans MicBoard : seuls les sons du Paysan, du Péon, de l'Acolyte et du Feu follet
-sont gardés, rangés par race.
+sont gardés, dans l'arborescence du jeu (par exemple `Human/Peasant`, `Orc/Peon`).
 
-Les sons sont copiés dans `Documents\MicBoard\sons\<catégorie>` : tu peux aussi y déposer tes fichiers à
-la main puis cliquer sur ⟳.
+Pour Wolfenstein ET et CS:S aussi, les sons gardent les dossiers du jeu (`chat/allies`, `radio`, `bot`…).
+
+Les sons sont copiés dans `Documents\MicBoard\sons\<catégorie>\…` : tu peux aussi y ranger tes fichiers
+et dossiers à la main, ils apparaissent au prochain lancement.
 
 ## Développement
 

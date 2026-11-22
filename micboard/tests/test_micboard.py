@@ -109,14 +109,33 @@ def test_import_css(tmp_path):
     assert (dest / "radio" / "go.wav").exists()
 
 
-def test_import_wc3(tmp_path):
-    src = tmp_path / "units"
+def test_import_wc3_keeps_game_tree(tmp_path):
+    src = tmp_path / "extrait" / "war3.w3mod" / "units"
     for rel in ["Human/Peasant/PeasantYes1.wav", "Orc/Peon/PeonWhat2.wav",
                 "Human/Footman/FootmanYes1.wav", "undead/acolyte/acolytepissed1.flac"]:
         p = src / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"x")
     dest = tmp_path / "wc3"
-    assert importers.import_wc3(src, dest) == 3
-    assert (dest / "Humain - Paysan" / "PeasantYes1.wav").exists()
+    assert importers.import_wc3(tmp_path / "extrait", dest) == 3
+    assert (dest / "Human" / "Peasant" / "PeasantYes1.wav").exists()
+    assert (dest / "Orc" / "Peon" / "PeonWhat2.wav").exists()
+    assert (dest / "undead" / "acolyte" / "acolytepissed1.flac").exists()
     assert not any("Footman" in str(p) for p in dest.rglob("*"))
+
+
+def test_import_folder_keeps_tree(tmp_path):
+    src = tmp_path / "Bruitages"
+    for rel in ["a.wav", "Portes/grince.ogg", "Portes/Lourdes/claque.mp3", "lisez-moi.txt"]:
+        p = src / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x")
+    (src / "Vide").mkdir()
+    lib = tmp_path / "lib" / "Mes sons"
+    n, created = importers.import_folder(src, lib)
+    assert n == 3 and created == lib / "Bruitages"
+    assert sorted(p.relative_to(created).as_posix() for p in created.rglob("*") if p.is_file()) == \
+        ["Portes/Lourdes/claque.mp3", "Portes/grince.ogg", "a.wav"]
+    assert importers.import_folder(src, lib)[0] == 0  # déjà importé : rien en double
+    with pytest.raises(ValueError):
+        importers.import_folder(src, src / "Portes")
