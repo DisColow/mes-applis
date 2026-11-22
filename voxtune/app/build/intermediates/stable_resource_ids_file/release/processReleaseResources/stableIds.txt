@@ -1,6 +1,0 @@
-fr.mesapplis.voxtune:style/AppTheme = 0x7f050000
-fr.mesapplis.voxtune:string/app_name = 0x7f040000
-fr.mesapplis.voxtune:color/bg = 0x7f010000
-fr.mesapplis.voxtune:mipmap/ic_launcher = 0x7f030000
-fr.mesapplis.voxtune:drawable/ic_launcher_fg = 0x7f020001
-fr.mesapplis.voxtune:drawable/ic_launcher_bg = 0x7f020000

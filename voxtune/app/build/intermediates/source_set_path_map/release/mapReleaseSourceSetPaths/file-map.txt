@@ -1,7 +1,0 @@
-fr.mesapplis.voxtune.app-pngs-0 /home/user/mes-applis/voxtune/app/build/generated/res/pngs/release
-fr.mesapplis.voxtune.app-resValues-1 /home/user/mes-applis/voxtune/app/build/generated/res/resValues/release
-fr.mesapplis.voxtune.app-packageReleaseResources-2 /home/user/mes-applis/voxtune/app/build/intermediates/incremental/release/packageReleaseResources/merged.dir
-fr.mesapplis.voxtune.app-packageReleaseResources-3 /home/user/mes-applis/voxtune/app/build/intermediates/incremental/release/packageReleaseResources/stripped.dir
-fr.mesapplis.voxtune.app-release-4 /home/user/mes-applis/voxtune/app/build/intermediates/merged_res/release/mergeReleaseResources
-fr.mesapplis.voxtune.app-main-5 /home/user/mes-applis/voxtune/app/src/main/res
-fr.mesapplis.voxtune.app-release-6 /home/user/mes-applis/voxtune/app/src/release/res
