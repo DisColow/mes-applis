@@ -78,35 +78,57 @@ def test_captured_label_used_when_layout_unknown(tmp_path, monkeypatch):
     assert hk.label("f5", "Ctrl + A") == "F5"  # pas de code matériel : nom calculé
 
 
-def test_hotkeys_really_register(tmp_path, monkeypatch):
-    """Reproduit keyboard.add_hotkey : le raccourci sert de clé de dictionnaire (une liste plantait)."""
-    import keyboard
-    registered = {}
+class FakeBackend:
+    """Remplace RegisterHotKey : garde les raccourcis pour pouvoir les « appuyer »."""
+    def __init__(self, refuse=()):
+        self.keys, self.refuse = {}, set(refuse)
+    def clear(self):
+        self.keys.clear()
+    def add(self, combo, callback):
+        if combo in self.refuse:
+            raise RuntimeError("déjà utilisé par une autre application")
+        self.keys[combo] = callback
+    def press(self, combo):
+        self.keys[combo]()
 
-    def fake_add_hotkey(hotkey, callback, args=(), **_kw):
-        # la vraie fonction finit par « _hotkeys[hotkey] = … » : TypeError si ce n'est pas hachable
-        registered[hotkey] = (callback, args)
 
-    monkeypatch.setattr(keyboard, "add_hotkey", fake_add_hotkey)
-    monkeypatch.setattr(keyboard, "unhook_all_hotkeys", lambda: registered.clear())
+def test_hotkey_plays_the_sound(tmp_path, monkeypatch):
     a, root = make_api(tmp_path, monkeypatch)
+    backend = FakeBackend()
+    a._backend = backend
     go = str(root / "Counter-Strike Source" / "radio" / "go.wav")
-    a.set_hotkey(go, "ctrl+alt+Digit1", "Ctrl + Alt + 1")  # Ctrl + Alt + & en AZERTY
+    a.set_hotkey(go, "ctrl+alt+KeyQ", "Ctrl + Alt + A")  # Ctrl + Alt + A en AZERTY
     a.set_stop_hotkey("shift+Numpad0", "Maj + Num 0")
-    assert ("ctrl", "alt", 2) in registered and ("shift", 82) in registered
-    callback, args = registered[("ctrl", "alt", 2)]
-    assert args == (go,)
-    assert a.status()["message"] == ""  # aucun échec signalé
+    assert set(backend.keys) == {"ctrl+alt+#16", "shift+#82"}
+
+    backend.press("ctrl+alt+#16")  # micro hors ligne : rien ne joue, mais on le dit
+    assert a._mixer.active() == [] and "Active" in a.status()["message"]
+    a.start()
+    backend.press("ctrl+alt+#16")
+    assert [v["tag"] for v in a._mixer.active()] == [go]
+    backend.press("shift+#82")  # tout arrêter
+    assert a._mixer.active() == []
 
 
-def test_hotkey_failure_is_reported(tmp_path, monkeypatch):
-    import keyboard
-
-    def broken(*_a, **_kw):
-        raise ValueError("touche inconnue")
-
-    monkeypatch.setattr(keyboard, "add_hotkey", broken)
-    monkeypatch.setattr(keyboard, "unhook_all_hotkeys", lambda: None)
+def test_refused_hotkey_is_explained(tmp_path, monkeypatch):
     a, root = make_api(tmp_path, monkeypatch)
-    a.set_hotkey(str(root / "Mes sons" / "klaxon.wav"), "f7", "F7")
-    assert "F7" in a.status()["message"]
+    a._backend = FakeBackend(refuse={"ctrl+alt+#16"})
+    a.set_hotkey(str(root / "Mes sons" / "klaxon.wav"), "ctrl+alt+KeyQ", "Ctrl + Alt + A")
+    msg = a.status()["message"]
+    assert "Ctrl + Alt + A" in msg and "autre application" in msg
+
+
+def test_combo_to_windows_keys():
+    from micboard.winhotkeys import MOD_ALT, MOD_CONTROL, MOD_SHIFT, HotkeyError, combo_to_vk
+    azerty = {16: 0x41, 30: 0x51, 2: 0x31}  # AZERTY : la touche de scan code 16 est A
+    conv = lambda c: combo_to_vk(c, azerty.get, lambda ch: ord(ch.upper()))
+    assert conv("ctrl+alt+#16") == (MOD_CONTROL | MOD_ALT, 0x41)
+    assert conv("ctrl+alt+#2") == (MOD_CONTROL | MOD_ALT, 0x31)  # touche &/1
+    assert conv("f5") == (0, 0x74)
+    assert conv("shift+#79") == (MOD_SHIFT, 0x61)  # Num 1
+    assert conv("up") == (0, 0x26)
+    import pytest
+    with pytest.raises(HotkeyError):
+        conv("ctrl+alt")
+    with pytest.raises(HotkeyError):
+        conv("ctrl+n'importe quoi")

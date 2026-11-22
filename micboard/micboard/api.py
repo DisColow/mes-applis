@@ -487,27 +487,47 @@ class Api:
         r = self.play(path)
         if not r["ok"]:
             self._message = r["error"]
+            if self._tray is not None and not self._window_visible():
+                self._tray.notify(r["error"])  # fenêtre cachée : bulle près de l'horloge
+
+    def _window_visible(self) -> bool:
+        try:
+            return not getattr(self._window, "hidden", False) and self._window is not None
+        except Exception:
+            return False
+
+    def _hotkey_backend(self):
+        """Sous Windows : RegisterHotKey (winhotkeys). Ailleurs : le module keyboard."""
+        if self.__dict__.get("_backend") is None:
+            import sys
+            if sys.platform == "win32":
+                from .winhotkeys import WinHotkeys
+                self._backend = WinHotkeys()
+            else:
+                self._backend = _KeyboardBackend()
+        return self._backend
 
     def _register_hotkeys(self) -> None:
         try:
-            import keyboard
-            keyboard.unhook_all_hotkeys()
-        except Exception:
+            backend = self._hotkey_backend()
+            backend.clear()
+        except Exception as e:
+            self._message = f"Raccourcis clavier indisponibles : {e}"
             return
         failed = []
 
-        def add(combo, callback, args=()):
+        def add(combo, callback):
             try:
-                keyboard.add_hotkey(hk.for_keyboard(combo), callback, args=args)
-            except Exception:
-                failed.append(self._hk_label(combo))
+                backend.add(combo, callback)
+            except Exception as e:
+                failed.append(f"{self._hk_label(combo)} ({e})")
 
         for path, combo in self._hotkeys.items():
             if Path(path).exists():
-                add(combo, self._hotkey_play, (path,))
+                add(combo, lambda p=path: self._hotkey_play(p))
         if self._cfg.get("stop_hotkey"):
             add(self._cfg["stop_hotkey"], self._mixer.stop_all)
-        if failed:  # plus jamais d'échec silencieux : l'interface l'affiche
+        if failed:  # jamais d'échec silencieux : l'interface l'affiche
             self._message = "Raccourci impossible à activer : " + ", ".join(failed)
 
     # --- recherche sur le PC -------------------------------------------------------------
@@ -706,3 +726,15 @@ class Api:
         self.disk_cancel()
         self._engine.stop()
         self._engine.close_preview()
+
+
+class _KeyboardBackend:
+    """Raccourcis par le module keyboard (hors Windows, pour le développement)."""
+
+    def clear(self) -> None:
+        import keyboard
+        keyboard.unhook_all_hotkeys()
+
+    def add(self, combo: str, callback) -> None:
+        import keyboard
+        keyboard.add_hotkey(hk.for_keyboard(combo), callback)
