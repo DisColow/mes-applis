@@ -553,3 +553,28 @@ body.maximized::after { display: none; }
 .rz[data-dir="ne"] { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; }
 .rz[data-dir="sw"] { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; }
 body.maximized .rz { display: none; }
+
+/* ---------------- choix d'affichage : grille / liste ---------------- */
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface); border: 1px solid var(--line-2); margin-right: 4px; }
+.seg button { width: 34px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+.seg button svg { width: 16px; height: 16px; }
+.seg button:hover { color: var(--text); }
+.seg button.on { background: var(--surface-3); color: var(--text); }
+
+/* mode liste : la phrase entière, lisible, sur plusieurs lignes si besoin */
+.grid.list { grid-template-columns: 1fr; gap: 6px; }
+.grid.list .card { align-items: flex-start; gap: 14px; padding: 14px 16px; }
+.grid.list .card .play { margin-top: 1px; }
+.grid.list .card .info { padding-right: 150px; }
+.grid.list .card .name {
+  white-space: normal; overflow: visible; text-overflow: clip;
+  font-size: 16px; font-weight: 500; line-height: 1.45; letter-spacing: .1px; color: var(--text);
+}
+.grid.list .card.tagged .name { padding-left: 12px; border-left: 3px solid color-mix(in srgb, var(--c) 75%, transparent); }
+.grid.list .card .meta { margin-top: 6px; flex-wrap: wrap; white-space: normal; row-gap: 2px; }
+.grid.list .card.tagged .meta { padding-left: 15px; }
+.grid.list .card .meta .folder { overflow: visible; }
+.grid.list .card .note { margin-top: 4px; padding-left: 15px; color: var(--muted); font-size: 13px; font-style: italic; }
+.grid.list .card .acts { top: 50%; bottom: auto; transform: translateY(-50%); height: 40px; }
+.grid.list .card .badges { top: 12px; right: 14px; }
+.grid.list .card .badges kbd { font-size: 11px; padding: 3px 6px; }

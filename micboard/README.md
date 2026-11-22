@@ -102,6 +102,16 @@ rendu lisible (« PeasantYes1 » devient « Peasant Yes 1 »). Le nom du fichier
 titre, et la recherche trouve le son par l'un comme par l'autre. Les métadonnées sont lues en arrière-plan
 au premier lancement, puis gardées en cache (`%APPDATA%\MicBoard\tags.json`).
 
+### Grille ou liste
+
+Le bouton à deux icônes, en haut de chaque dossier, choisit l'affichage :
+- **Grille** : compacte, beaucoup de sons à l'écran ;
+- **Liste** : une ligne par son, avec la phrase **entière** en gros, sur plusieurs lignes si besoin.
+  Pratique quand le titre du fichier est la transcription de ce qui est dit. Le commentaire, s'il y en
+  a un en plus du titre, s'affiche en italique dessous.
+
+Le choix est retenu d'une fois sur l'autre.
+
 ### Rechercher un son
 
 Tape dans la barre de recherche (touche **/** pour y aller) : les résultats s'affichent pendant la
@@ -160,6 +170,42 @@ Pour Wolfenstein ET et CS:S aussi, les sons gardent les dossiers du jeu (`chat/a
 Les sons sont copiés dans `Documents\MicBoard\sons\<catégorie>\…` : tu peux aussi y ranger tes fichiers
 et dossiers à la main, ils apparaissent au prochain lancement.
 
+## Fenêtre
+
+MicBoard dessine sa propre barre de titre : on déplace la fenêtre en la tirant par cette barre,
+double-clic pour l'agrandir (sans recouvrir la barre des tâches), et on la redimensionne par ses bords.
+**Alt+F4** ferme toujours la fenêtre.
+
+## Windows Defender et SmartScreen
+
+Deux protections différentes peuvent se plaindre :
+- **SmartScreen** (« Windows a protégé votre ordinateur ») : il bloque tout exe qui n'est pas **signé
+  numériquement** et qu'il ne connaît pas encore. Clique sur *Informations complémentaires* › *Exécuter
+  quand même*.
+- **Defender** (fichier mis en quarantaine) : une fausse alerte fréquente avec les exe faits avec
+  PyInstaller, dont le chargeur standard est aussi utilisé par des logiciels malveillants. La compilation
+  recompile donc ce chargeur à partir de ses sources, et l'exe porte une icône et une fiche de version
+  (nom, éditeur, version), ce qui réduit ces alertes sans pouvoir les supprimer à coup sûr. Si Defender
+  bloque quand même MicBoard, on peut signaler la fausse alerte à Microsoft :
+  <https://www.microsoft.com/wdsi/filesubmission>.
+
+L'empreinte SHA-256 de chaque exe est indiquée dans sa release, pour vérifier qu'il n'a pas été modifié.
+
+### Signature de l'exe
+
+Seule une signature numérique fait disparaître ces avertissements durablement. Elle demande un
+**certificat de signature de code** délivré à ton nom après vérification d'identité : ça ne se
+fabrique pas soi-même. Pistes possibles :
+- **SignPath Foundation** : gratuit pour les projets open source (dépôt public, licence open source,
+  compilation automatique) ; le certificat est au nom de la fondation ;
+- **Azure Artifact Signing** (ex-Trusted Signing) de Microsoft : environ 10 $ par mois, mais ouvert aux
+  particuliers seulement dans certains pays (à vérifier pour la France au moment de s'inscrire) ;
+- un certificat classique acheté auprès d'une autorité de certification (quelques centaines d'euros par an).
+
+Une fois le certificat obtenu (fichier `.pfx`), la compilation le prend en charge toute seule : ajoute
+dans le dépôt GitHub, *Settings › Secrets and variables › Actions*, les secrets `WINDOWS_CERT_PFX`
+(le fichier `.pfx` encodé en base64) et `WINDOWS_CERT_PASSWORD`. Les exe suivants seront signés.
+
 ## Développement
 
 ```bash
@@ -174,4 +220,7 @@ python main.py            # python main.py --debug pour ouvrir les outils de dé
 - `micboard/importers.py` : extraction depuis les `.pk3` d'ET, le `.vpk` de CS:S et un dossier WC3 ;
 - `micboard/api.py` : fonctions appelées par l'interface ;
 - `micboard/ui/` : interface (HTML, CSS, JavaScript), affichée par pywebview avec le moteur d'Edge (WebView2) ;
-- `micboard/app.py` : création de la fenêtre.
+- `micboard/app.py` : création de la fenêtre ; `micboard/winframe.py` : agrandir et redimensionner la
+  fenêtre sans cadre ;
+- `tools/make_icon.py` : fabrique `assets/micboard.ico` à partir du logo ; `tools/version_file.py` : fiche
+  de version de l'exe.

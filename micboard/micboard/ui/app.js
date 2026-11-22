@@ -175,12 +175,30 @@ $("#crumbs").addEventListener("click", (e) => {
   if (b && !b.disabled && !b.classList.contains("cur")) openFolder(b.dataset.goto);
 });
 
+/* Mode d'affichage des sons : grille (compacte) ou liste (phrases entières, pour les titres
+   qui contiennent la transcription de ce qui est dit). Retenu d'une fois sur l'autre. */
+try { S.layout = localStorage.getItem("micboard.layout") === "list" ? "list" : "grid"; } catch { S.layout = "grid"; }
+function layoutSwitchHTML() {
+  return `<div class="seg" role="group" aria-label="Affichage">
+    <button class="${S.layout === "grid" ? "on" : ""}" data-layout="grid" title="Grille : compacte" type="button">${icon("grid")}</button>
+    <button class="${S.layout === "list" ? "on" : ""}" data-layout="list" title="Liste : phrases entières, pratique quand le titre est la transcription du son" type="button">${icon("rows")}</button>
+  </div>`;
+}
+$("#lib-actions").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-layout]");
+  if (!b || b.dataset.layout === S.layout) return;
+  S.layout = b.dataset.layout;
+  try { localStorage.setItem("micboard.layout", S.layout); } catch { /* stockage indisponible */ }
+  $$("#lib-actions [data-layout]").forEach((x) => x.classList.toggle("on", x.dataset.layout === S.layout));
+  load();
+});
+
 function renderHeading(d) {
   const h = $("#lib-title"), sub = $("#lib-sub"), acts = $("#lib-actions");
   if (S.view === "favorites") {
     h.textContent = "Favoris";
     sub.textContent = S.query ? `${plural(d.total, "résultat")} pour « ${S.query} »` : plural(d.total, "son");
-    acts.innerHTML = "";
+    acts.innerHTML = layoutSwitchHTML();
     return;
   }
   const c = catOf(topOf(S.folder));
@@ -200,7 +218,7 @@ function renderHeading(d) {
     if (S.folder && d.folders.length && d.total) bits.push(`${d.total} ici`);
     sub.textContent = bits.join(" · ");
   }
-  acts.innerHTML = `
+  acts.innerHTML = layoutSwitchHTML() + `
     <button class="secondary small" data-action="import-folder" title="Copier un dossier du PC ici, avec tous ses sous-dossiers" type="button">${icon("folder-plus")}Importer un dossier</button>
     <button class="secondary small" data-action="add-files" type="button">${icon("plus")}Fichiers</button>
     <button class="secondary small" data-action="random" title="Un son au hasard dans ce dossier" type="button">${icon("dice")}</button>
@@ -282,6 +300,7 @@ function cardHTML(r, i, showPath) {
     <div class="info">
       <div class="name">${highlight(r.name)}</div>
       <div class="meta"><span class="tag">${esc(showPath && !S.folder || S.view === "favorites" ? c.short : r.file.split(".").pop().toUpperCase())}</span>${pathHTML}${r.duration ? `<span>·</span><span>${fmtDur(r.duration)}</span>` : ""}${fileHTML}</div>
+      ${S.layout === "list" && r.source === "title" && r.comment ? `<div class="note">${highlight(r.comment)}</div>` : ""}
     </div>
     <div class="badges">${r.hotkey ? `<kbd>${esc(r.hotkey)}</kbd>` : ""}${r.favorite ? `<svg class="star"><use href="#i-star"/></svg>` : ""}</div>
     <div class="acts">
@@ -298,6 +317,7 @@ function renderGrid(d) {
   const grid = $("#grid");
   const empty = $("#lib-empty");
   const showPath = d.mode === "search";
+  grid.classList.toggle("list", S.layout === "list");
   const title = d.mode === "browse" && S.results.length && d.folders.length ? `<div class="section-title">Sons</div>` : "";
   grid.innerHTML = title + S.results.map((r, i) => cardHTML(r, i, showPath)).join("");
   $("#more").hidden = S.results.length >= S.total;
