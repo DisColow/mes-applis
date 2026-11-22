@@ -34,6 +34,17 @@ def tokens(text: str) -> list[str]:
     return [t for t in _SPLIT.split(fold(_CAMEL.sub(" ", text))) if t]
 
 
+_DIGITS = re.compile(r"(\d+)")
+
+
+def file_key(path) -> tuple:
+    """Tri A-Z par nom de fichier, sans tenir compte des majuscules ni des accents, et avec les
+    nombres comparés comme des nombres : « PeasantYes2 » avant « PeasantYes10 »."""
+    name = fold(Path(path).name)
+    return tuple((0, int(part), "") if part.isdigit() else (1, 0, part)
+                 for part in _DIGITS.split(name) if part) + ((2, 0, Path(path).name),)
+
+
 def pretty_name(stem: str) -> str:
     """« peasantYes1 » / « a-medic_3 » -> « Peasant Yes 1 » / « A Medic 3 »."""
     words = re.split(r"[\s_\-.]+", _CAMEL.sub(" ", stem))
@@ -133,11 +144,11 @@ class Index:
                 if self.in_folder(e, folder or "") and (only is None or str(e.path) in only)]
         q_tokens = tokens(query)
         if not q_tokens:
-            pool.sort(key=lambda e: (e.rel_dir.lower(), e.name.lower()))
+            pool.sort(key=lambda e: (e.rel_dir.lower(), file_key(e.path)))
             return pool[:limit], len(pool)
         joined = "".join(q_tokens)
         scored = [(s, e) for e in pool if (s := self.score(e, q_tokens, joined)) > 0]
-        scored.sort(key=lambda x: (-x[0], x[1].name.lower()))
+        scored.sort(key=lambda x: (-x[0], file_key(x[1].path)))
         return [e for _s, e in scored[:limit]], len(scored)
 
 

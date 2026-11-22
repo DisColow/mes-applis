@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import importers, library
 from .audio import AudioEngine, Mixer
-from .search import DiskSearch, Index, drives
+from .search import DiskSearch, Index, drives, file_key
 from .winframe import Frame
 
 APP = "MicBoard"
@@ -248,7 +248,7 @@ class Api:
             sub = node["dirs"][name]
             folders.append({"name": name, "rel": f"{rel}/{name}" if rel else name,
                             "count": self._count(sub), "subfolders": len(sub["dirs"])})
-        here = sorted((e for e in self._index.entries if e.rel_dir == rel), key=lambda e: e.name.lower())
+        here = sorted((e for e in self._index.entries if e.rel_dir == rel), key=lambda e: file_key(e.path))
         return {"rel": rel, "crumbs": crumbs, "folders": folders, "total": len(here),
                 "count": self._count(node), "files": [self._entry_dict(e) for e in here[:int(limit)]],
                 "path": str(self._root / rel) if rel else str(self._root)}

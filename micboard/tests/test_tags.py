@@ -175,3 +175,20 @@ def test_api_tag_encoding_setting(tmp_path, monkeypatch):
         time.sleep(0.02)
     assert a.search("ru", "Mes sons")["results"][0]["name"] == "Привет"
     assert "error" in a.set_tag_encoding("n'importe quoi")
+
+
+def test_sounds_sorted_by_file_name(tmp_path, monkeypatch):
+    from micboard.search import file_key
+    names = ["b10.wav", "B2.wav", "a.wav", "Écho.wav", "b1.wav", "zz.wav"]
+    assert sorted(names, key=file_key) == ["a.wav", "b1.wav", "B2.wav", "b10.wav", "Écho.wav", "zz.wav"]
+
+    a, root = make_api(tmp_path, monkeypatch)
+    d = root / "Mes sons" / "Tri"
+    # les titres sont dans l'ordre inverse des noms de fichiers : c'est le nom de fichier qui compte
+    for f, title in [("son10.wav", "Alpha"), ("son2.wav", "Bravo"), ("son1.wav", "Zoulou")]:
+        write(d / f, title=title)
+    a.rescan()
+    a._measure(list(d.glob("*.wav")))
+    assert [x["file"] for x in a.browse("Mes sons/Tri")["files"]] == ["son1.wav", "son2.wav", "son10.wav"]
+    assert [x["file"] for x in a.search("", "Mes sons/Tri")["results"]] == ["son1.wav", "son2.wav", "son10.wav"]
+    assert [x["file"] for x in a.search("son", "Mes sons/Tri")["results"]] == ["son1.wav", "son2.wav", "son10.wav"]
