@@ -441,6 +441,7 @@ function setLive(on) {
   S.running = on;
   $("#live").dataset.init = 1;
   $("#live").classList.toggle("on", on);
+  document.body.classList.toggle("on-air", on);
   $("#live-title").textContent = on ? "En direct" : "Micro hors ligne";
   $("#live-sub").textContent = on ? "Les sons partent dans CABLE Output" : "Clique pour activer";
 }
@@ -1096,3 +1097,57 @@ async function importDiskFolder(src) {
   await refreshTree();
   fillDestSelect();
 }
+
+/* ------------------------------------------------------------------ barre de titre maison */
+const MIN_W = 900, MIN_H = 600;
+const MAX_ICON = '<rect x="2" y="2" width="8" height="8" rx="1.5"/>';
+const RESTORE_ICON = '<rect x="2" y="4" width="6" height="6" rx="1.2"/><path d="M4 4V3.2C4 2.5 4.5 2 5.2 2H8.8C9.5 2 10 2.5 10 3.2V6.8C10 7.5 9.5 8 8.8 8H8"/>';
+
+function setMaximized(on) {
+  document.body.classList.toggle("maximized", on);
+  $("#tb-max-ic").innerHTML = on ? RESTORE_ICON : MAX_ICON;
+  $('[data-win="max"]').title = on ? "Niveau inférieur" : "Agrandir";
+  // une fenêtre agrandie ne se déplace pas : on retire les zones de déplacement
+  $$("[data-drag]").forEach((el) => el.classList.toggle("pywebview-drag-region", !on));
+}
+async function toggleMax() {
+  try { setMaximized(await api.win_toggle_max()); } catch { /* hors de l'appli Windows */ }
+}
+$(".tb-btns").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-win]");
+  if (!b) return;
+  if (b.dataset.win === "min") api.win_minimize();
+  else if (b.dataset.win === "max") toggleMax();
+  else if (b.dataset.win === "close") api.win_close();
+});
+$$("[data-drag]").forEach((el) => el.addEventListener("dblclick", toggleMax));
+
+/* redimensionnement par les bords et les coins */
+$$(".rz").forEach((handle) => handle.addEventListener("pointerdown", async (e) => {
+  if (e.button !== 0 || document.body.classList.contains("maximized")) return;
+  e.preventDefault();
+  handle.setPointerCapture(e.pointerId);
+  const dir = handle.dataset.dir;
+  const sx = e.screenX, sy = e.screenY;
+  let g;
+  try { g = await api.win_geometry(); } catch { return; }
+  let pending = null, busy = false;
+  const target = (ev) => {
+    const dx = ev.screenX - sx, dy = ev.screenY - sy;
+    let { x, y, w, h } = g;
+    if (dir.includes("e")) w = Math.max(MIN_W, g.w + dx);
+    if (dir.includes("s")) h = Math.max(MIN_H, g.h + dy);
+    if (dir.includes("w")) { w = Math.max(MIN_W, g.w - dx); x = g.x + g.w - w; }
+    if (dir.includes("n")) { h = Math.max(MIN_H, g.h - dy); y = g.y + g.h - h; }
+    return { x, y, w, h };
+  };
+  const flush = async () => { // un seul appel à la fois : on applique toujours la dernière position
+    busy = true;
+    while (pending) { const p = pending; pending = null; await api.win_set_geometry(p.x, p.y, p.w, p.h); }
+    busy = false;
+  };
+  const onMove = (ev) => { pending = target(ev); if (!busy) flush(); };
+  const onUp = () => { handle.removeEventListener("pointermove", onMove); handle.removeEventListener("pointerup", onUp); };
+  handle.addEventListener("pointermove", onMove);
+  handle.addEventListener("pointerup", onUp);
+}));

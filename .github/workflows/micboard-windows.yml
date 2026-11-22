@@ -17,6 +17,11 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # La signature ne se fait que si un certificat a été ajouté dans les secrets du dépôt
+      # (Settings › Secrets and variables › Actions) : WINDOWS_CERT_PFX (fichier .pfx en base64)
+      # et WINDOWS_CERT_PASSWORD. Voir micboard/README.md, « Signature de l'exe ».
+      HAS_SIGN_CERT: ${{ secrets.WINDOWS_CERT_PFX != '' }}
     defaults:
       run:
         working-directory: micboard
@@ -28,13 +33,49 @@ jobs:
           python-version: "3.12"
 
       - name: Dépendances
-        run: pip install -r requirements.txt pytest pyinstaller
+        run: pip install -r requirements.txt pytest
+
+      # Le chargeur (bootloader) fourni tout fait avec PyInstaller est partagé par énormément
+      # de logiciels malveillants, d'où les fausses alertes de Windows Defender. On le recompile
+      # ici à partir des sources : l'exe obtenu n'a plus cette empreinte connue.
+      - name: PyInstaller avec un chargeur compilé ici
+        env:
+          PYINSTALLER_COMPILE_BOOTLOADER: "1"
+        run: pip install --no-binary pyinstaller pyinstaller
 
       - name: Tests
         run: python -m pytest -q tests
 
       - name: Compilation de l'exe
-        run: pyinstaller --noconfirm --onefile --windowed --name MicBoard --add-data "micboard/ui;micboard/ui" --collect-all webview --collect-submodules mutagen main.py
+        run: |
+          python tools/version_file.py build/version_info.txt ${{ github.run_number }}
+          pyinstaller --noconfirm --onefile --windowed --name MicBoard `
+            --icon assets/micboard.ico --version-file build/version_info.txt `
+            --add-data "micboard/ui;micboard/ui" --add-data "assets;assets" `
+            --collect-all webview --collect-submodules mutagen main.py
+
+      - name: Signature de l'exe
+        if: env.HAS_SIGN_CERT == 'true'
+        shell: pwsh
+        env:
+          CERT: ${{ secrets.WINDOWS_CERT_PFX }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName sign /f $pfx /p $env:CERT_PASSWORD /fd SHA256 `
+            /tr http://timestamp.digicert.com /td SHA256 /d MicBoard dist\MicBoard.exe
+          $code = $LASTEXITCODE
+          Remove-Item $pfx
+          if ($code -ne 0) { exit $code }
+
+      - name: Empreinte SHA-256
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist\MicBoard.exe -Algorithm SHA256).Hash
+          "SHA256=$hash" >> $env:GITHUB_ENV
 
       - uses: actions/upload-artifact@v4
         with:
@@ -51,5 +92,7 @@ jobs:
             Télécharge **MicBoard.exe** et lance-le (Windows 10/11, rien d'autre à installer
             à part VB-Audio Virtual Cable : https://vb-audio.com/Cable/).
             L'interface utilise WebView2, déjà présent sur Windows 10 et 11.
+            ${{ env.HAS_SIGN_CERT == 'true' && 'Exe signé numériquement.' || 'Exe non signé : si Windows affiche « Windows a protégé votre ordinateur », clique sur « Informations complémentaires » puis « Exécuter quand même ».' }}
+            Empreinte SHA-256 : `${{ env.SHA256 }}`
             Compilé depuis `${{ github.ref_name }}` @ ${{ github.sha }}.
           files: micboard/dist/MicBoard.exe

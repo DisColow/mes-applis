@@ -17,6 +17,7 @@ from pathlib import Path
 from . import importers, library
 from .audio import AudioEngine, Mixer
 from .search import DiskSearch, Index, drives
+from .winframe import Frame
 
 APP = "MicBoard"
 CATEGORY_STYLE = {  # couleur et icône de chaque catégorie dans l'interface
@@ -52,6 +53,7 @@ class Api:
         self._scan_id = 0
         self._disk: dict[str, DiskSearch] = {}
         self._window = None
+        self._frame = Frame()
         self._message = ""
         self._apply_mix()
         self.rescan()
@@ -59,6 +61,23 @@ class Api:
 
     def _attach(self, window) -> None:
         self._window = window
+        self._frame.attach(window)
+
+    # --- barre de titre maison (fenêtre sans cadre Windows) ---------------------------------------
+    def win_minimize(self) -> None:
+        self._frame.minimize()
+
+    def win_toggle_max(self) -> bool:
+        return self._frame.toggle_maximize()
+
+    def win_close(self) -> None:
+        self._frame.close()
+
+    def win_geometry(self) -> dict:
+        return self._frame.geometry()
+
+    def win_set_geometry(self, x: float, y: float, w: float, h: float) -> None:
+        self._frame.set_geometry(x, y, w, h)
 
     # --- configuration -----------------------------------------------------------------
     def _load(self) -> dict:

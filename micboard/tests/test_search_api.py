@@ -204,3 +204,24 @@ def test_setup_wizard_api(tmp_path, monkeypatch):
     a.setup_done(True)
     assert a.first_run() is False
     assert apimod.Api(engine=FakeEngine(), cfg_file=tmp_path / "cfg.json").first_run() is False
+
+
+def test_window_frame_outside_windows():
+    from micboard.winframe import Frame
+
+    class FakeWindow:
+        x, y, width, height = 10, 20, 1280, 820
+        calls = []
+        def maximize(self): self.calls.append("max")
+        def restore(self): self.calls.append("restore")
+        def minimize(self): self.calls.append("min")
+        def move(self, x, y): self.calls.append(("move", x, y))
+        def resize(self, w, h): self.calls.append(("resize", w, h))
+
+    f = Frame()
+    w = FakeWindow()
+    f.attach(w)
+    assert f.toggle_maximize() is True and f.toggle_maximize() is False
+    assert f.geometry() == {"x": 10, "y": 20, "w": 1280, "h": 820, "maximized": False}
+    f.set_geometry(5, 6, 100, 100)  # taille minimale respectée
+    assert w.calls[-2:] == [("move", 5, 6), ("resize", 900, 600)]

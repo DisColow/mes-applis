@@ -42,13 +42,28 @@
   <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17V5.5l11-2V15" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.8" fill="currentColor"/><circle cx="17.5" cy="15.5" r="2.8" fill="currentColor"/></symbol>
 </svg>
 
+<!-- ======================= barre de titre (la fenêtre n'a pas de cadre Windows) ======================= -->
+<header class="titlebar" id="titlebar">
+  <div class="tb-brand pywebview-drag-region" data-drag>
+    <svg class="brand-logo"><use href="#i-logo"/></svg>
+    <span class="brand-name">MicBoard</span>
+    <span class="brand-sub">des sons dans ton micro</span>
+  </div>
+  <div class="tb-drag pywebview-drag-region" data-drag>
+    <span class="tb-live" id="tb-live"><i></i>En direct</span>
+  </div>
+  <div class="tb-btns">
+    <button class="tb-btn" data-win="min" title="Réduire" type="button"><svg viewBox="0 0 12 12"><path d="M2 6.5h8"/></svg></button>
+    <button class="tb-btn" data-win="max" title="Agrandir" type="button"><svg viewBox="0 0 12 12" id="tb-max-ic"><rect x="2" y="2" width="8" height="8" rx="1.5"/></svg></button>
+    <button class="tb-btn close" data-win="close" title="Fermer" type="button"><svg viewBox="0 0 12 12"><path d="m2.5 2.5 7 7m0-7-7 7"/></svg></button>
+  </div>
+</header>
+<div class="rz" data-dir="n"></div><div class="rz" data-dir="s"></div><div class="rz" data-dir="e"></div><div class="rz" data-dir="w"></div>
+<div class="rz" data-dir="nw"></div><div class="rz" data-dir="ne"></div><div class="rz" data-dir="sw"></div><div class="rz" data-dir="se"></div>
+
 <div class="app">
   <!-- ======================= barre latérale ======================= -->
   <aside class="sidebar">
-    <div class="brand">
-      <svg class="brand-logo"><use href="#i-logo"/></svg>
-      <div><div class="brand-name">MicBoard</div><div class="brand-sub">des sons dans ton micro</div></div>
-    </div>
 
     <button class="live" id="live" type="button">
       <span class="live-dot"></span>
