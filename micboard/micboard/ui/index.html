@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MicBoard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b6cff"/><stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <symbol id="i-logo" viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="9" fill="url(#g-accent)"/><path d="M9 19v-6M13 22V10M17 20v-8M21 23V9M25 18v-4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.25 4.1 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.7l5.9-.9Z" fill="currentColor"/></symbol>
+  <symbol id="i-star-o" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.25 4.1 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.7l5.9-.9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="5" height="7" rx="2" fill="currentColor"/><rect x="16" y="14" width="5" height="7" rx="2" fill="currentColor"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1M10 10h1M14 10h1M18 10h0M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-mic-off" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" opacity=".45"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M4 4l16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8.5" cy="8.5" r="1.4" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.4" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.4" fill="currentColor"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3 5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 9.5a2.6 2.6 0 1 1 3.6 2.4c-.7.3-1.1.9-1.1 1.6v.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="currentColor"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-drive" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16.5" cy="12" r="1.3" fill="currentColor"/><path d="M6.5 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2" fill="currentColor"/><rect x="13" y="4" width="7" height="7" rx="2" fill="currentColor" opacity=".55"/><rect x="4" y="13" width="7" height="7" rx="2" fill="currentColor" opacity=".55"/><rect x="13" y="13" width="7" height="7" rx="2" fill="currentColor"/></symbol>
+  <symbol id="i-helmet" viewBox="0 0 24 24"><path d="M3.5 15a8.5 8.5 0 0 1 17 0Z" fill="currentColor"/><path d="M2.5 15.5h19v1.3a1.2 1.2 0 0 1-1.2 1.2H3.7a1.2 1.2 0 0 1-1.2-1.2Z" fill="currentColor" opacity=".7"/><path d="M12 6.6V15" stroke="#000" stroke-opacity=".25" stroke-width="1.5"/></symbol>
+  <symbol id="i-hammer" viewBox="0 0 24 24"><path d="M13.5 3.5 20.5 10.5 18 13 11 6Z" fill="currentColor"/><path d="m13 10-8.5 8.5a1.6 1.6 0 0 0 2.3 2.3L15.3 12.3Z" fill="currentColor" opacity=".7"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17V5.5l11-2V15" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.8" fill="currentColor"/><circle cx="17.5" cy="15.5" r="2.8" fill="currentColor"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ======================= barre latérale ======================= -->
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand-logo"><use href="#i-logo"/></svg>
+      <div><div class="brand-name">MicBoard</div><div class="brand-sub">des sons dans ton micro</div></div>
+    </div>
+
+    <button class="live" id="live" type="button">
+      <span class="live-dot"></span>
+      <span class="live-text"><b id="live-title">Micro hors ligne</b><small id="live-sub">Clique pour activer</small></span>
+      <span class="switch"><span></span></span>
+    </button>
+
+    <nav class="nav" id="nav">
+      <div class="nav-label">Bibliothèque</div>
+      <button class="nav-item active" data-view="all" type="button"><svg><use href="#i-grid"/></svg><span>Tous les sons</span><em id="count-all">0</em></button>
+      <button class="nav-item" data-view="favorites" type="button"><svg><use href="#i-star"/></svg><span>Favoris</span><em id="count-fav">0</em></button>
+      <div id="nav-cats"></div>
+      <div class="nav-label">Trouver des sons</div>
+      <button class="nav-item" data-view="disk" type="button"><svg><use href="#i-drive"/></svg><span>Chercher sur mon PC</span></button>
+      <button class="nav-item" data-action="import" type="button"><svg><use href="#i-download"/></svg><span>Importer depuis mes jeux</span></button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="ghost" data-action="settings" type="button"><svg><use href="#i-gear"/></svg>Réglages</button>
+      <button class="ghost" data-action="help" type="button"><svg><use href="#i-help"/></svg>Aide</button>
+    </div>
+  </aside>
+
+  <!-- ======================= contenu ======================= -->
+  <main class="main">
+    <!-- bibliothèque -->
+    <section class="view" id="view-library">
+      <header class="top">
+        <label class="searchbox">
+          <svg><use href="#i-search"/></svg>
+          <input id="q" type="search" autocomplete="off" spellcheck="false"
+                 placeholder="Rechercher un son… medic, peasant yes, fire in the hole">
+          <kbd id="q-hint">/</kbd>
+        </label>
+        <button class="icon-btn" data-action="random" title="Un son au hasard" type="button"><svg><use href="#i-dice"/></svg></button>
+      </header>
+      <div class="scroll" id="lib-scroll">
+        <div class="heading">
+          <div>
+            <h1 id="lib-title">Tous les sons</h1>
+            <p id="lib-sub" class="muted"></p>
+          </div>
+          <div class="heading-actions" id="lib-actions"></div>
+        </div>
+        <div id="fav-strip" class="pads"></div>
+        <div id="grid" class="grid"></div>
+        <div id="lib-empty" class="empty" hidden></div>
+        <button id="more" class="more" type="button" hidden>Afficher plus de résultats</button>
+      </div>
+    </section>
+
+    <!-- recherche sur le PC -->
+    <section class="view" id="view-disk" hidden>
+      <header class="top">
+        <label class="searchbox">
+          <svg><use href="#i-search"/></svg>
+          <input id="dq" type="search" autocomplete="off" spellcheck="false"
+                 placeholder="Nom du fichier à trouver sur le PC (vide = tous les sons)">
+        </label>
+        <button class="primary" id="disk-go" type="button"><svg><use href="#i-search"/></svg>Chercher</button>
+      </header>
+      <div class="scroll">
+        <div class="heading">
+          <div>
+            <h1>Chercher sur mon PC</h1>
+            <p class="muted">Trouve des fichiers audio (wav, ogg, flac, mp3) sur tes disques, écoute-les, puis ajoute-les à ta bibliothèque.</p>
+          </div>
+        </div>
+        <div class="roots" id="roots"></div>
+        <div class="disk-status" id="disk-status" hidden>
+          <span class="spinner"></span><span id="disk-status-text"></span>
+          <button class="link" id="disk-cancel" type="button">Arrêter</button>
+        </div>
+        <div class="disk-bar" id="disk-bar" hidden>
+          <label class="check"><input type="checkbox" id="disk-all"><span></span>Tout sélectionner</label>
+          <span class="muted" id="disk-count"></span>
+          <span class="spacer"></span>
+          <select id="disk-cat"></select>
+          <button class="primary small" id="disk-add" type="button" disabled><svg><use href="#i-plus"/></svg>Ajouter la sélection</button>
+        </div>
+        <div class="disk-list" id="disk-list"></div>
+        <div id="disk-empty" class="empty">
+          <div class="empty-art"><svg><use href="#i-drive"/></svg></div>
+          <h2>Où sont tes sons ?</h2>
+          <p class="muted">Choisis les endroits à fouiller ci-dessus, tape un mot (ou rien) puis « Chercher ».</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= lecteur ======================= -->
+    <footer class="player">
+      <div class="now" id="now">
+        <div class="now-art" id="now-art"><span></span><span></span><span></span><span></span></div>
+        <div class="now-text"><b id="now-name">Rien en cours</b><small id="now-sub">Double-clic, Entrée ou un raccourci pour jouer</small></div>
+        <button class="round stop" data-action="stop" title="Tout arrêter (Échap)" type="button"><svg><use href="#i-stop"/></svg></button>
+      </div>
+      <div class="mixer">
+        <button class="mic-toggle" id="mic-toggle" type="button" title="Transmettre ma voix">
+          <svg><use href="#i-mic"/></svg>
+          <span class="vu"><i id="vu-mic"></i></span>
+        </button>
+        <label class="fader"><span>Sons</span><input type="range" min="0" max="1.5" step="0.01" data-mix="sound_volume"></label>
+        <label class="fader"><span>Voix</span><input type="range" min="0" max="1.5" step="0.01" data-mix="mic_volume"></label>
+        <label class="fader"><span><svg><use href="#i-headphones"/></svg></span><input type="range" min="0" max="1.5" step="0.01" data-mix="monitor_volume"></label>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<!-- ======================= fenêtres ======================= -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <button class="icon-btn close" data-action="close" type="button" title="Fermer"><svg><use href="#i-x"/></svg></button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

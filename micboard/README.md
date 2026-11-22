@@ -17,17 +17,39 @@ Il est prévu pour les sons de **Wolfenstein: Enemy Territory**, des **ouvriers 
 
 ## Utilisation
 
-1. Dans MicBoard, choisis :
-   - **Micro réel** : ton vrai micro (ta voix passe toujours, mélangée aux sons) ;
+1. Ouvre **Réglages** (en bas à gauche) et choisis :
+   - **Mon vrai micro** : ta voix passe toujours, mélangée aux sons ;
    - **Sortie vers le câble** : `CABLE Input` ;
-   - **Retour casque** : ton casque, si tu veux entendre les sons toi aussi.
-2. Clique sur **▶ Démarrer**.
+   - **Retour casque** : ton casque, pour entendre les sons toi aussi et pour la pré-écoute.
+2. Clique sur **Micro hors ligne** (en haut à gauche) : il passe à **En direct**.
 3. Dans Discord / le jeu / OBS, choisis **CABLE Output** comme micro.
-4. Double-clic sur un son (ou Entrée) pour le jouer, **Échap** pour tout arrêter.
 
-Clic droit sur un son : **favori** (gros bouton à droite) ou **raccourci clavier global**, qui marche
-même en plein jeu. Si le jeu est lancé en administrateur, lance MicBoard en administrateur aussi.
-Si un périphérique refuse de s'ouvrir, change le **Pilote audio** (MME marche presque partout).
+Le bouton micro du lecteur (en bas) coupe ou rétablit ta voix ; son vumètre montre qu'elle passe.
+Les curseurs règlent séparément le volume des sons, de ta voix et du casque.
+
+### Rechercher un son
+
+Tape dans la barre de recherche (touche **/** pour y aller) : les résultats s'affichent pendant la
+frappe. La recherche ignore les majuscules et les accents, accepte les mots dans le désordre
+(« yes peasant »), comprend les noms collés (« PeasantYes1 ») et pardonne les petites fautes
+(« peasnat »). Elle cherche aussi dans les noms de dossiers (« radio », « orc »…).
+
+| Touche | Action |
+|---|---|
+| **Entrée** | jouer le premier résultat (ou celui sélectionné) dans le micro |
+| **Maj + Entrée** | l'écouter dans le casque seulement |
+| **↑ ↓ ← →** | se déplacer entre les sons |
+| **Échap** | effacer la recherche, puis tout arrêter |
+
+Au survol d'un son : pré-écoute 🎧, favori ⭐ (gros bouton en haut de la bibliothèque),
+**raccourci clavier global** ⌨ (marche même en plein jeu ; si le jeu est lancé en administrateur,
+lance MicBoard en administrateur aussi) et ouverture du dossier.
+
+### Chercher des sons sur le PC
+
+**Chercher sur mon PC** fouille ton dossier utilisateur, tes disques ou les dossiers de ton choix à la
+recherche de fichiers audio. Écoute-les au casque, coche ceux qui te plaisent et ajoute-les à une
+catégorie de ta bibliothèque.
 
 ## Importer les sons
 
@@ -57,10 +79,13 @@ la main puis cliquer sur ⟳.
 ```bash
 pip install -r requirements.txt pytest
 python -m pytest -q tests
-python main.py
+python main.py            # python main.py --debug pour ouvrir les outils de développement
 ```
 
-- `micboard/audio.py` : mélangeur (micro + sons) et flux audio (sounddevice / PortAudio) ;
+- `micboard/audio.py` : mélangeur (micro + sons, pré-écoute, niveaux) et flux audio (sounddevice / PortAudio) ;
+- `micboard/search.py` : moteur de recherche de la bibliothèque et recherche de fichiers sur le disque ;
 - `micboard/library.py` : dossiers de sons, chargement et rééchantillonnage à 48 kHz ;
 - `micboard/importers.py` : extraction depuis les `.pk3` d'ET, le `.vpk` de CS:S et un dossier WC3 ;
-- `micboard/app.py` : interface tkinter.
+- `micboard/api.py` : fonctions appelées par l'interface ;
+- `micboard/ui/` : interface (HTML, CSS, JavaScript), affichée par pywebview avec le moteur d'Edge (WebView2) ;
+- `micboard/app.py` : création de la fenêtre.
