@@ -111,6 +111,7 @@ def test_hotkey_plays_the_sound(tmp_path, monkeypatch):
 
 
 def test_refused_hotkey_is_explained(tmp_path, monkeypatch):
+    monkeypatch.setattr(hk, "key_char", lambda sc: "")  # disposition inconnue : nom capturé
     a, root = make_api(tmp_path, monkeypatch)
     a._backend = FakeBackend(refuse={"ctrl+alt+#16"})
     a.set_hotkey(str(root / "Mes sons" / "klaxon.wav"), "ctrl+alt+KeyQ", "Ctrl + Alt + A")
