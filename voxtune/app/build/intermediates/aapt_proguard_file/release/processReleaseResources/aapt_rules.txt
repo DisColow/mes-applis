@@ -1,0 +1,1 @@
+-keep class fr.mesapplis.voxtune.MainActivity { <init>(); }

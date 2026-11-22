@@ -1,8 +1,6 @@
 # Mes applis
 
-Les applis de ce dépôt, une par dossier :
-
-- [`voxtune/`](voxtune/) : VoxTune, appli Android d'auto-tune en temps réel.
+Les applis de ce dépôt, une par dossier.
 
 ## Règle pour les branches
 

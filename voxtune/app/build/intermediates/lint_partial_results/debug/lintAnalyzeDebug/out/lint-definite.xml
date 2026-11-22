@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<incidents format="6" by="lint 8.7.3" type="incidents">
+
+    <incident
+        id="DiscouragedApi"
+        severity="warning"
+        message="Should not restrict activity to fixed orientation. This may not be suitable for different form factors, causing the app to be letterboxed.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*manifest*0}"
+            line="17"
+            column="13"
+            startOffset="698"
+            endLine="17"
+            endColumn="49"
+            endOffset="734"/>
+    </incident>
+
+    <incident
+        id="ObsoleteSdkInt"
+        severity="warning"
+        message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 29. Merge all the resources in this folder into `mipmap-anydpi`.">
+        <fix-data file="${:app*debug*MAIN*sourceProvider*0*resDir*0}/mipmap-anydpi-v26" folderName="mipmap-anydpi" requiresApi="29"/>
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*resDir*0}/mipmap-anydpi-v26"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="307"
+            column="21"
+            startOffset="13210"
+            endLine="307"
+            endColumn="42"
+            endOffset="13231"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="319"
+            column="21"
+            startOffset="13703"
+            endLine="319"
+            endColumn="39"
+            endOffset="13721"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="386"
+            column="21"
+            startOffset="16780"
+            endLine="386"
+            endColumn="58"
+            endOffset="16817"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="393"
+            column="21"
+            startOffset="17081"
+            endLine="393"
+            endColumn="38"
+            endOffset="17098"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="496"
+            column="45"
+            startOffset="20905"
+            endLine="496"
+            endColumn="56"
+            endOffset="20916"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="498"
+            column="27"
+            startOffset="21008"
+            endLine="498"
+            endColumn="61"
+            endOffset="21042"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="498"
+            column="27"
+            startOffset="21008"
+            endLine="498"
+            endColumn="104"
+            endOffset="21085"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="507"
+            column="37"
+            startOffset="21386"
+            endLine="507"
+            endColumn="86"
+            endOffset="21435"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="507"
+            column="37"
+            startOffset="21386"
+            endLine="508"
+            endColumn="52"
+            endOffset="21489"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="507"
+            column="37"
+            startOffset="21386"
+            endLine="508"
+            endColumn="98"
+            endOffset="21535"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="507"
+            column="69"
+            startOffset="21418"
+            endLine="507"
+            endColumn="85"
+            endOffset="21434"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="508"
+            column="55"
+            startOffset="21492"
+            endLine="508"
+            endColumn="98"
+            endOffset="21535"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="508"
+            column="56"
+            startOffset="21493"
+            endLine="508"
+            endColumn="63"
+            endOffset="21500"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="508"
+            column="92"
+            startOffset="21529"
+            endLine="508"
+            endColumn="97"
+            endOffset="21534"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="547"
+            column="29"
+            startOffset="23247"
+            endLine="547"
+            endColumn="77"
+            endOffset="23295"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="550"
+            column="29"
+            startOffset="23434"
+            endLine="550"
+            endColumn="88"
+            endOffset="23493"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="550"
+            column="65"
+            startOffset="23470"
+            endLine="550"
+            endColumn="68"
+            endOffset="23473"/>
+    </incident>
+
+    <incident
+        id="SetTextI18n"
+        severity="warning"
+        message="String literal in `setText` can not be translated. Use Android resources instead.">
+        <location
+            file="${:app*debug*MAIN*sourceProvider*0*javaDir*0}/fr/mesapplis/voxtune/MainActivity.kt"
+            line="550"
+            column="81"
+            startOffset="23486"
+            endLine="550"
+            endColumn="87"
+            endOffset="23492"/>
+    </incident>
+
+</incidents>

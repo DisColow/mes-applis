@@ -1,0 +1,45 @@
+{
+    "logs": [
+        {
+            "outputFile": "fr.mesapplis.voxtune.app-mergeReleaseResources-2:/values/values.xml",
+            "map": [
+                {
+                    "source": "/home/user/mes-applis/voxtune/app/src/main/res/values/strings.xml",
+                    "from": {
+                        "startLines": "1",
+                        "startColumns": "4",
+                        "startOffsets": "16",
+                        "endColumns": "44",
+                        "endOffsets": "56"
+                    },
+                    "to": {
+                        "startLines": "3",
+                        "startColumns": "4",
+                        "startOffsets": "92",
+                        "endColumns": "44",
+                        "endOffsets": "132"
+                    }
+                },
+                {
+                    "source": "/home/user/mes-applis/voxtune/app/src/main/res/values/styles.xml",
+                    "from": {
+                        "startLines": "8,1",
+                        "startColumns": "4,4",
+                        "startOffsets": "403,16",
+                        "endLines": "8,7",
+                        "endColumns": "36,12",
+                        "endOffsets": "435,398"
+                    },
+                    "to": {
+                        "startLines": "2,4",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,137",
+                        "endLines": "2,10",
+                        "endColumns": "36,12",
+                        "endOffsets": "87,519"
+                    }
+                }
+            ]
+        }
+    ]
+}

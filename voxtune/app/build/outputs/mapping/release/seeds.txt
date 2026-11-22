@@ -1,0 +1,11 @@
+fr.mesapplis.voxtune.MainActivity
+fr.mesapplis.voxtune.MainActivity: MainActivity()
+fr.mesapplis.voxtune.PitchGraphView: void setKeyRoot(int)
+fr.mesapplis.voxtune.PitchGraphView: int getKeyRoot()
+fr.mesapplis.voxtune.AudioEngine$Mode: fr.mesapplis.voxtune.AudioEngine$Mode[] values()
+fr.mesapplis.voxtune.dsp.Scale: fr.mesapplis.voxtune.dsp.Scale[] values()
+fr.mesapplis.voxtune.PitchGraphView: void setQuantizer(fr.mesapplis.voxtune.dsp.ScaleQuantizer)
+fr.mesapplis.voxtune.dsp.Scale: fr.mesapplis.voxtune.dsp.Scale valueOf(java.lang.String)
+kotlin.collections.AbstractList: AbstractList()
+fr.mesapplis.voxtune.AudioEngine$Mode: fr.mesapplis.voxtune.AudioEngine$Mode valueOf(java.lang.String)
+fr.mesapplis.voxtune.PitchGraphView: fr.mesapplis.voxtune.dsp.ScaleQuantizer getQuantizer()
