@@ -22,6 +22,8 @@ jobs:
         working-directory: relance
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # historique complet, pour retrouver le dernier changement de l'appli
 
       - uses: actions/setup-java@v5
         with:
@@ -42,6 +44,20 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           cp app/build/outputs/apk/release/app-release.apk Relance.apk
 
+      # Contenu de la release : le message du dernier commit qui a modifié l'appli, sans les signatures.
+      - name: Résumé de la release
+        run: |
+          {
+            echo "## Contenu de cette version"
+            echo
+            git log -1 --format='**%s**%n%n%b' -- . | grep -v -E '^(Co-Authored-By|Claude-Session|Signed-off-by):'
+            echo
+            echo "---"
+            echo "Ouvrez **Relance.apk** sur votre téléphone Android (10 ou plus) pour l'installer."
+            echo "Compilé depuis \`${{ github.ref_name }}\` @ ${{ github.sha }}."
+          } > ../release-notes.md
+          cat ../release-notes.md
+
       - uses: actions/upload-artifact@v4
         with:
           name: Relance-${{ env.VERSION }}-apk
@@ -53,7 +69,5 @@ jobs:
           tag_name: relance-v${{ env.VERSION }}-${{ github.run_number }}
           name: Relance ${{ env.VERSION }} (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
-          body: |
-            Ouvrez **Relance.apk** sur votre téléphone Android (10 ou plus) pour l'installer.
-            Compilé depuis `${{ github.ref_name }}` @ ${{ github.sha }}.
+          body_path: release-notes.md
           files: relance/Relance.apk
