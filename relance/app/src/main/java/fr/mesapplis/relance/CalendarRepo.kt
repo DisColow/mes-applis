@@ -44,6 +44,37 @@ object CalendarRepo {
         prefs.chosenCalendars?.mapNotNull { it.toLongOrNull() }?.toSet()
             ?: calendars(ctx).filter { it.writable }.map { it.id }.toSet()
 
+    /**
+     * L'événement qui m'occupe en ce moment (ou qui commence dans moins de [marginMin] minutes),
+     * hors journée entière, refusé, annulé ou marqué « disponible ». null = agenda libre.
+     */
+    fun busyWith(ctx: Context, now: Long, calendarIds: Set<Long>, marginMin: Int = 5): Question? {
+        if (!hasPermission(ctx) || calendarIds.isEmpty()) return null
+        val soon = now + marginMin * 60_000L
+        val uri = Instances.CONTENT_URI.buildUpon().also {
+            ContentUris.appendId(it, now - 24 * 3600_000L)
+            ContentUris.appendId(it, soon)
+        }.build()
+        ctx.contentResolver.query(
+            uri,
+            arrayOf(Instances.EVENT_ID, Instances.TITLE, Instances.BEGIN, Instances.END, Instances.CALENDAR_ID,
+                Instances.SELF_ATTENDEE_STATUS, Instances.STATUS, Instances.AVAILABILITY),
+            "${Instances.BEGIN} < ? AND ${Instances.END} > ? AND ${Instances.ALL_DAY} = 0",
+            arrayOf(soon.toString(), now.toString()),
+            "${Instances.END} DESC",
+        )?.use { c ->
+            while (c.moveToNext()) {
+                if (c.getLong(4) !in calendarIds) continue
+                if (c.getInt(5) == Attendees.ATTENDEE_STATUS_DECLINED) continue
+                if (!c.isNull(6) && c.getInt(6) == Events.STATUS_CANCELED) continue
+                if (c.getInt(7) == Events.AVAILABILITY_FREE) continue
+                return Question("${c.getLong(0)}@${c.getLong(2)}", c.getString(1) ?: "(Sans titre)", "",
+                    c.getLong(2), c.getLong(3))
+            }
+        }
+        return null
+    }
+
     /** Événements (hors journée entière, refusés ou annulés) terminés dans ]from, to]. */
     fun endedBetween(ctx: Context, from: Long, to: Long, calendarIds: Set<Long>): List<Question> {
         if (!hasPermission(ctx) || calendarIds.isEmpty()) return emptyList()

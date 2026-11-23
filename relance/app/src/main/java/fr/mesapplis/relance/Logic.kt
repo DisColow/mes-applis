@@ -23,6 +23,16 @@ object Logic {
     fun formatTimes(times: List<LocalTime>): String =
         times.joinToString(", ") { if (it.minute == 0) "${it.hour}h" else "${it.hour}h%02d".format(it.minute) }
 
+    /** Lit une seule heure (« 8h », « 21h30 »), ou [default] si illisible. */
+    fun parseTime(text: String, default: LocalTime): LocalTime =
+        if (Regex("""\d""").containsMatchIn(text)) parseTimes(text).first() else default
+
+    fun formatTime(t: LocalTime): String = formatTimes(listOf(t))
+
+    /** Vrai si [t] est dans la journée [start, end[ (une plage qui passe minuit est acceptée). */
+    fun inDay(t: LocalTime, start: LocalTime, end: LocalTime): Boolean =
+        if (start <= end) t >= start && t < end else t >= start || t < end
+
     /** Le dernier créneau de relance passé (aujourd'hui ou hier), au plus tard [now]. */
     fun lastSlot(now: LocalDateTime, times: List<LocalTime>): LocalDateTime {
         val today = now.toLocalDate()

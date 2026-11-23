@@ -108,6 +108,35 @@ class MainActivity : Activity() {
             })
         }
 
+        // Quand me déranger
+        section("Quand me déranger")
+        val reason = Checks.busyReason(this)
+        val waiting = Checks.waitingCount(this)
+        root.addView(text(
+            (if (reason == null) "🟢 En ce moment : je peux te notifier."
+            else "⏸ En ce moment j'attends : $reason.") +
+                (if (waiting > 0) "\n$waiting question${if (waiting > 1) "s" else ""} en attente." else ""),
+            14f, color = if (reason == null) Color.rgb(46, 125, 50) else Color.DKGRAY))
+        root.addView(text("Je ne t'envoie les questions et les relances qu'en journée, et quand ton agenda " +
+            "ne montre aucun événement en cours (ni qui commence dans les 5 minutes). Sinon j'attends le prochain moment libre.",
+            13f, color = Color.GRAY))
+        root.addView(check("Attendre que mon agenda soit libre", prefs.waitUntilFree) { prefs.waitUntilFree = it })
+        val dayStart = EditText(this).apply {
+            setText(Logic.formatTime(Logic.parseTime(prefs.dayStart, java.time.LocalTime.of(8, 0))))
+            hint = "8h"
+        }
+        val dayEnd = EditText(this).apply {
+            setText(Logic.formatTime(Logic.parseTime(prefs.dayEnd, java.time.LocalTime.of(21, 0))))
+            hint = "21h"
+        }
+        root.addView(row(text("Ma journée de ", 14f), dayStart, text(" à ", 14f), dayEnd))
+        root.addView(button("Enregistrer ma journée") {
+            prefs.dayStart = Logic.formatTime(Logic.parseTime(dayStart.text.toString(), java.time.LocalTime.of(8, 0)))
+            prefs.dayEnd = Logic.formatTime(Logic.parseTime(dayEnd.text.toString(), java.time.LocalTime.of(21, 0)))
+            toast("Journée : ${prefs.dayStart} – ${prefs.dayEnd}")
+            render()
+        })
+
         // Réglages
         section("Après les événements")
         root.addView(check("Me demander si c'est fait à la fin de chaque événement", prefs.askEvents) { prefs.askEvents = it })
@@ -354,7 +383,7 @@ class MainActivity : Activity() {
 
     private fun row(vararg views: View) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.START
+        gravity = Gravity.CENTER_VERTICAL
         views.forEach { addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) }) }
     }

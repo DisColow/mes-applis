@@ -56,6 +56,20 @@ class Prefs(context: Context) {
         get() = sp.getString("reminderTimes", "9h, 18h")!!
         set(v) = sp.edit().putString("reminderTimes", v).apply()
 
+    /** Début et fin de la journée : pas de notification en dehors. */
+    var dayStart: String
+        get() = sp.getString("dayStart", "8h")!!
+        set(v) = sp.edit().putString("dayStart", v).apply()
+
+    var dayEnd: String
+        get() = sp.getString("dayEnd", "21h")!!
+        set(v) = sp.edit().putString("dayEnd", v).apply()
+
+    /** Attendre que l'agenda soit libre (aucun événement en cours) pour notifier. */
+    var waitUntilFree: Boolean
+        get() = sp.getBoolean("waitUntilFree", true)
+        set(v) = sp.edit().putBoolean("waitUntilFree", v).apply()
+
     /** Nombre de jours à l'avance pour les tâches « à venir ». */
     var horizonDays: Int
         get() = sp.getInt("horizonDays", 7)

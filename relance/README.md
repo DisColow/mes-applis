@@ -13,6 +13,14 @@ Appli Android qui :
    - un récapitulatif des tâches **à venir** (7 prochains jours par défaut) ;
    - quelques tâches **sans date** (3 à chaque fois, à tour de rôle), pour qu'elles te reviennent en tête.
 
+**Jamais quand tu es occupé·e** : les questions et les relances n'arrivent qu'**en journée**
+(8h – 21h par défaut, réglable) et quand **ton agenda est libre** — aucun événement en cours ni qui
+commence dans les 5 minutes (les événements refusés, annulés, « journée entière » ou marqués « disponible »
+ne comptent pas). Sinon elles attendent le prochain moment libre : par exemple, après deux réunions
+enchaînées, les deux questions arrivent à la fin de la seconde ; une relance de 18h tombée pendant
+un rendez-vous arrive quand il se termine ; ce qui tombe le soir arrive le lendemain matin.
+Les boutons « Revoir les événements » et « Me relancer maintenant » de l'appli, eux, agissent tout de suite.
+
 L'écran de l'appli montre aussi tes tâches (en retard / aujourd'hui / à venir) avec les mêmes boutons,
 l'historique de tes réponses, et les réglages : agendas surveillés, heures de relance, nombre de jours « à venir ».
 

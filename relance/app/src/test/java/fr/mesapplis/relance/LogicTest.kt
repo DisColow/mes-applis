@@ -53,6 +53,21 @@ class LogicTest {
     }
 
     @Test
+    fun day() {
+        val s = LocalTime.of(8, 0)
+        val e = LocalTime.of(21, 0)
+        assertEquals(true, Logic.inDay(LocalTime.of(8, 0), s, e))
+        assertEquals(true, Logic.inDay(LocalTime.of(20, 59), s, e))
+        assertEquals(false, Logic.inDay(LocalTime.of(21, 0), s, e))
+        assertEquals(false, Logic.inDay(LocalTime.of(3, 0), s, e))
+        // Plage qui passe minuit (ex. 22h → 2h)
+        assertEquals(true, Logic.inDay(LocalTime.of(1, 0), LocalTime.of(22, 0), LocalTime.of(2, 0)))
+        assertEquals(false, Logic.inDay(LocalTime.of(12, 0), LocalTime.of(22, 0), LocalTime.of(2, 0)))
+        assertEquals(LocalTime.of(21, 30), Logic.parseTime("21h30", s))
+        assertEquals(s, Logic.parseTime("", s))
+    }
+
+    @Test
     fun rotate() {
         val items = listOf("a", "b", "c", "d", "e")
         assertEquals(listOf("a", "b", "c"), Logic.rotate(items, 0, 3))
