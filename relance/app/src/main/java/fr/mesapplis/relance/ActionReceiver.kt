@@ -51,7 +51,11 @@ class ActionReceiver : BroadcastReceiver() {
         val prefs = Prefs(ctx)
         when (action) {
             EVENT_SNOOZE -> prefs.snooze(question(intent).copy(askAt = System.currentTimeMillis() + 3600_000L))
-            EVENT_DONE -> prefs.addAnswer(answer(intent, done = true, taskCreated = false))
+            EVENT_DONE -> {
+                // Coche dans l'agenda tout de suite (pas besoin d'internet) ; les tâches ensuite.
+                Sync.eventDone(ctx, question(intent))
+                if (prefs.tasksConnected) enqueue(ctx, action, intent)
+            }
             EVENT_NOT_DONE -> {
                 val createTask = prefs.tasksConnected && prefs.createTaskWhenNotDone
                 prefs.addAnswer(answer(intent, done = false, taskCreated = createTask))
@@ -97,7 +101,13 @@ class ActionWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
             val api = GoogleAuth.api(ctx)
             val today = LocalDate.now()
             when (d.getString("action")) {
-                ActionReceiver.TASK_DONE -> api.complete(d.getString("listId")!!, d.getString("taskId")!!)
+                ActionReceiver.TASK_DONE -> {
+                    api.complete(d.getString("listId")!!, d.getString("taskId")!!)
+                    Sync.taskCompleted(ctx, d.getString("taskId")!!)
+                }
+                ActionReceiver.EVENT_DONE -> Sync.completeTasksOf(ctx, api, Question(
+                    d.getString("key").orEmpty(), d.getString("title").orEmpty(), "",
+                    d.getLong("begin", 0), d.getLong("end", 0)))
                 ActionReceiver.TASK_TOMORROW -> api.setDue(d.getString("listId")!!, d.getString("taskId")!!, today.plusDays(1))
                 ActionReceiver.TASK_NEXT_WEEK -> api.setDue(d.getString("listId")!!, d.getString("taskId")!!, today.plusDays(7))
                 ActionReceiver.EVENT_NOT_DONE -> {
@@ -107,7 +117,11 @@ class ActionWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
                         val desc = d.getString("description").orEmpty()
                         if (desc.isNotEmpty()) append("\n\n").append(desc)
                     }
-                    api.create(d.getString("title") ?: "À reprendre", notes, today)
+                    val id = api.create(d.getString("title") ?: "À reprendre", notes, today)
+                    // On retient le lien pour cocher l'événement quand la tâche sera faite.
+                    if (id.isNotEmpty()) Prefs(ctx).linkTask(id, Question(
+                        d.getString("key").orEmpty(), d.getString("title").orEmpty(), "",
+                        d.getLong("begin", 0), d.getLong("end", 0)))
                 }
             }
             Result.success()

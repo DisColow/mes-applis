@@ -77,7 +77,7 @@ class MainActivity : Activity() {
         val missing = missingPermissions()
         if (missing.isNotEmpty()) {
             section("Autorisations")
-            root.addView(text("Il me faut l'accès à ton agenda et le droit d'afficher des notifications.", 14f))
+            root.addView(text("Il me faut l'accès à ton agenda (pour le lire et y cocher ce qui est fait) et le droit d'afficher des notifications.", 14f))
             root.addView(button("Autoriser") { requestPermissions(missing, RC_PERMS) })
         }
 
@@ -193,6 +193,7 @@ class MainActivity : Activity() {
             history.take(15).forEach { a ->
                 val whenTxt = Logic.dayTime(Instant.ofEpochMilli(a.end).atZone(ZoneId.systemDefault()).toLocalDateTime())
                 val status = when {
+                    a.done && a.ticked -> "✅ fait · coché dans l'agenda"
                     a.done -> "✅ fait"
                     a.taskCreated -> "↻ pas fait · tâche créée"
                     else -> "❌ pas fait"
@@ -243,7 +244,7 @@ class MainActivity : Activity() {
         col.addView(text(t.title, 15f))
         col.addView(text("$due · ${t.listTitle}", 12f, color = Color.GRAY))
         col.addView(row(
-            small("Fait") { taskAction(t) { api -> api.complete(t.listId, t.id) } },
+            small("Fait") { taskAction(t) { api -> api.complete(t.listId, t.id); Sync.taskCompleted(this, t.id) } },
             small("Demain") { taskAction(t) { api -> api.setDue(t.listId, t.id, today.plusDays(1)) } },
             small("+1 sem.") { taskAction(t) { api -> api.setDue(t.listId, t.id, today.plusDays(7)) } },
         ))
@@ -329,7 +330,7 @@ class MainActivity : Activity() {
     }
 
     private fun missingPermissions(): Array<String> {
-        val wanted = mutableListOf(Manifest.permission.READ_CALENDAR)
+        val wanted = mutableListOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
         if (android.os.Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
         return wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.toTypedArray()
     }

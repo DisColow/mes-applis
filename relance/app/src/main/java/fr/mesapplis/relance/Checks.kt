@@ -87,8 +87,10 @@ object Checks {
     /** Récupère les tâches Google Tasks et envoie les relances. Renvoie les tâches ouvertes. */
     fun remindTasks(ctx: Context): List<GTask> {
         val prefs = Prefs(ctx)
-        val tasks = GoogleAuth.api(ctx).allOpenTasks()
+        val api = GoogleAuth.api(ctx)
+        val tasks = api.allOpenTasks()
         Notifier.cancelAuth(ctx)
+        Sync.checkLinkedTasks(ctx, api, tasks)
         val undated = if (prefs.remindUndated) {
             val rot = prefs.rotation
             prefs.rotation = rot + 1
@@ -123,5 +125,55 @@ class CheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
             }
         }
         return Result.success()
+    }
+}
+
+/** Garde l'agenda et Google Tasks d'accord quand quelque chose est fait. */
+object Sync {
+
+    /** « C'est fait » sur un événement : coche dans l'agenda et réponse enregistrée. */
+    fun eventDone(ctx: Context, q: Question) {
+        val ticked = CalendarRepo.markDone(ctx, q)
+        Prefs(ctx).addAnswer(Answer(q.key, q.title, q.end, done = true, taskCreated = false, ticked = ticked))
+    }
+
+    /**
+     * Termine dans Google Tasks les tâches qui correspondent à l'événement fait :
+     * celle créée après un « Pas fait », et celles qui portent le même titre.
+     */
+    fun completeTasksOf(ctx: Context, api: TasksApi, q: Question): Int {
+        val prefs = Prefs(ctx)
+        val linked = prefs.taskLinks().filterValues { it.key == q.key }.keys
+        val wanted = Logic.normalizeTitle(q.title)
+        val matches = api.allOpenTasks().filter {
+            it.id in linked || (wanted.isNotEmpty() && Logic.normalizeTitle(it.title) == wanted)
+        }
+        matches.forEach {
+            api.complete(it.listId, it.id)
+            prefs.unlinkTask(it.id)
+            Notifier.cancel(ctx, Notifier.taskNotifId(it.id))
+        }
+        linked.forEach { prefs.unlinkTask(it) }
+        return matches.size
+    }
+
+    /** Une tâche vient d'être terminée : si elle venait d'un événement « pas fait », on coche l'événement. */
+    fun taskCompleted(ctx: Context, taskId: String) {
+        val prefs = Prefs(ctx)
+        val q = prefs.taskLinks()[taskId] ?: return
+        prefs.unlinkTask(taskId)
+        val ticked = CalendarRepo.markDone(ctx, q)
+        prefs.addAnswer(Answer(q.key, q.title, q.end, done = true, taskCreated = true, ticked = ticked))
+    }
+
+    /** Tâches liées à un événement, terminées directement dans Google Tasks depuis la dernière fois. */
+    fun checkLinkedTasks(ctx: Context, api: TasksApi, open: List<GTask>) {
+        val openIds = open.map { it.id }.toSet()
+        Prefs(ctx).taskLinks().keys.filter { it !in openIds }.forEach { id ->
+            when (runCatching { api.status(id) }.getOrElse { return@forEach }) {
+                "completed" -> taskCompleted(ctx, id)
+                null -> Prefs(ctx).unlinkTask(id) // supprimée
+            }
+        }
     }
 }

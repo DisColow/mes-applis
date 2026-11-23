@@ -13,6 +13,18 @@ Appli Android qui :
    - un récapitulatif des tâches **à venir** (7 prochains jours par défaut) ;
    - quelques tâches **sans date** (3 à chaque fois, à tour de rôle), pour qu'elles te reviennent en tête.
 
+**Ce qui est fait est coché partout** :
+- « C'est fait » sur un événement ajoute **✅ devant son titre dans l'agenda** (seulement cette occurrence
+  si l'événement se répète) et **termine dans Google Tasks** la tâche correspondante : celle créée après
+  un « Pas fait », et toute tâche ouverte qui porte le même titre (sans tenir compte des majuscules,
+  accents et ponctuation).
+- Quand tu termines une tâche créée après un « Pas fait » (depuis Relance ou directement dans Google Tasks),
+  l'événement d'origine reçoit sa coche ✅.
+- Un événement déjà coché ✅ (par l'appli ou à la main) ne déclenche plus de question.
+- La coche n'est possible que sur les événements que tu peux modifier : ceux d'un agenda à toi dont tu es
+  l'organisateur (ou dont les invités peuvent modifier l'événement). Pour une invitation d'une autre personne,
+  la réponse est seulement enregistrée dans l'appli.
+
 **Jamais quand tu es occupé·e** : les questions et les relances n'arrivent qu'**en journée**
 (8h – 21h par défaut, réglable) et quand **ton agenda est libre** — aucun événement en cours ni qui
 commence dans les 5 minutes (les événements refusés, annulés, « journée entière » ou marqués « disponible »

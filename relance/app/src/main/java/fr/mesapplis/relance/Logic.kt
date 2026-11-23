@@ -23,6 +23,24 @@ object Logic {
     fun formatTimes(times: List<LocalTime>): String =
         times.joinToString(", ") { if (it.minute == 0) "${it.hour}h" else "${it.hour}h%02d".format(it.minute) }
 
+    /** Coche ajoutée au titre d'un événement fait. */
+    const val DONE_MARK = "✅"
+
+    fun isMarkedDone(title: String) = title.trimStart().startsWith(DONE_MARK)
+
+    fun markDone(title: String) = if (isMarkedDone(title)) title else "$DONE_MARK $title"
+
+    /**
+     * Forme comparable d'un titre (pour retrouver la tâche d'un événement) :
+     * sans coche, accents, ponctuation ni majuscules. « ✅ Appeler l'école ! » → « appeler l ecole ».
+     */
+    fun normalizeTitle(title: String): String =
+        java.text.Normalizer.normalize(title.replace(DONE_MARK, ""), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase(Locale.ROOT)
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+            .trim()
+
     /** Lit une seule heure (« 8h », « 21h30 »), ou [default] si illisible. */
     fun parseTime(text: String, default: LocalTime): LocalTime =
         if (Regex("""\d""").containsMatchIn(text)) parseTimes(text).first() else default

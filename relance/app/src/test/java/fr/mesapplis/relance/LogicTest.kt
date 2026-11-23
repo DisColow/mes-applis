@@ -68,6 +68,16 @@ class LogicTest {
     }
 
     @Test
+    fun doneMark() {
+        assertEquals("✅ Appeler l'école", Logic.markDone("Appeler l'école"))
+        assertEquals("✅ Appeler l'école", Logic.markDone("✅ Appeler l'école"))
+        assertEquals(true, Logic.isMarkedDone(" ✅ X"))
+        assertEquals(false, Logic.isMarkedDone("X ✅"))
+        assertEquals("appeler l ecole", Logic.normalizeTitle("✅ Appeler  l'École !"))
+        assertEquals(Logic.normalizeTitle("Réunion budget"), Logic.normalizeTitle("reunion BUDGET"))
+    }
+
+    @Test
     fun rotate() {
         val items = listOf("a", "b", "c", "d", "e")
         assertEquals(listOf("a", "b", "c"), Logic.rotate(items, 0, 3))

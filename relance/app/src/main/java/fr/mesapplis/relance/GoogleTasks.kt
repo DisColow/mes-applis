@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit
 /** L'accès à Google Tasks doit être (ré)autorisé depuis l'appli. */
 class NeedsAuthException(msg: String = "Connexion à Google Tasks nécessaire") : Exception(msg)
 
+class NotFoundException : IOException("Introuvable dans Google Tasks")
+
 data class GTask(
     val listId: String,
     val listTitle: String,
@@ -102,10 +104,19 @@ class TasksApi(private val token: String) {
         call("PATCH", "/lists/${enc(listId)}/tasks/${enc(taskId)}", JSONObject().put("due", Logic.formatDue(due)))
     }
 
-    fun create(title: String, notes: String, due: LocalDate?, listId: String = "@default") {
+    /** Crée une tâche et renvoie son identifiant. */
+    fun create(title: String, notes: String, due: LocalDate?, listId: String = "@default"): String {
         val body = JSONObject().put("title", title).put("notes", notes)
         if (due != null) body.put("due", Logic.formatDue(due))
-        call("POST", "/lists/${enc(listId)}/tasks", body)
+        return call("POST", "/lists/${enc(listId)}/tasks", body).optString("id")
+    }
+
+    /** État d'une tâche : "completed", "needsAction", ou null si elle a été supprimée. */
+    fun status(taskId: String, listId: String = "@default"): String? = try {
+        val o = call("GET", "/lists/${enc(listId)}/tasks/${enc(taskId)}")
+        if (o.optBoolean("deleted")) null else o.optString("status")
+    } catch (e: NotFoundException) {
+        null
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
@@ -131,6 +142,7 @@ class TasksApi(private val token: String) {
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() } ?: ""
             if (code == 401) throw NeedsAuthException()
+            if (code == 404) throw NotFoundException()
             if (code !in 200..299) throw IOException("Google Tasks a répondu $code : ${text.take(300)}")
             return if (text.isBlank()) JSONObject() else JSONObject(text)
         } finally {

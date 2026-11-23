@@ -17,6 +17,46 @@ object CalendarRepo {
     fun hasPermission(ctx: Context) =
         ctx.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
+    fun canWrite(ctx: Context) =
+        ctx.checkSelfPermission(Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Ajoute la coche ✅ au titre de l'événement (seulement cette occurrence s'il se répète).
+     * Possible seulement si l'agenda est modifiable et que je peux modifier l'événement
+     * (j'en suis l'organisateur, ou les invités ont le droit de le modifier).
+     * Renvoie vrai si l'événement porte la coche à la fin.
+     */
+    fun markDone(ctx: Context, q: Question): Boolean {
+        if (!canWrite(ctx)) return false
+        val eventId = q.key.substringBefore("@").toLongOrNull() ?: return false
+        return runCatching {
+            ctx.contentResolver.query(
+                ContentUris.withAppendedId(Events.CONTENT_URI, eventId),
+                arrayOf(Events.TITLE, Events.RRULE, Events.RDATE, Events.CALENDAR_ACCESS_LEVEL,
+                    Events.IS_ORGANIZER, Events.GUESTS_CAN_MODIFY),
+                null, null, null,
+            )?.use { c ->
+                if (!c.moveToFirst()) return@use false
+                val title = c.getString(0) ?: ""
+                if (Logic.isMarkedDone(title)) return@use true
+                if (c.getInt(3) < Calendars.CAL_ACCESS_CONTRIBUTOR) return@use false
+                val organizer = c.getString(4).let { it == null || it == "1" }
+                if (!organizer && c.getInt(5) != 1) return@use false
+                val values = android.content.ContentValues().apply { put(Events.TITLE, Logic.markDone(title)) }
+                val recurring = !c.getString(1).isNullOrEmpty() || !c.getString(2).isNullOrEmpty()
+                if (recurring) {
+                    // Exception pour cette seule occurrence : les autres gardent leur titre.
+                    values.put(Events.ORIGINAL_INSTANCE_TIME, q.begin)
+                    ctx.contentResolver.insert(
+                        ContentUris.withAppendedId(Events.CONTENT_EXCEPTION_URI, eventId), values) != null
+                } else {
+                    ctx.contentResolver.update(
+                        ContentUris.withAppendedId(Events.CONTENT_URI, eventId), values, null, null) > 0
+                }
+            } ?: false
+        }.getOrDefault(false)
+    }
+
     fun calendars(ctx: Context): List<CalendarInfo> {
         if (!hasPermission(ctx)) return emptyList()
         val out = mutableListOf<CalendarInfo>()
@@ -95,6 +135,8 @@ object CalendarRepo {
                 if (c.getLong(5) !in calendarIds) continue
                 if (c.getInt(6) == Attendees.ATTENDEE_STATUS_DECLINED) continue
                 if (!c.isNull(7) && c.getInt(7) == Events.STATUS_CANCELED) continue
+                // Déjà coché (dans l'appli ou à la main) : pas besoin de demander.
+                if (Logic.isMarkedDone(c.getString(1) ?: "")) continue
                 val begin = c.getLong(3)
                 out += Question(
                     key = "${c.getLong(0)}@$begin",

@@ -26,7 +26,10 @@ data class Question(
 }
 
 /** Réponse donnée à une question, gardée pour l'historique affiché dans l'appli. */
-data class Answer(val key: String, val title: String, val end: Long, val done: Boolean, val taskCreated: Boolean)
+data class Answer(
+    val key: String, val title: String, val end: Long, val done: Boolean, val taskCreated: Boolean,
+    val ticked: Boolean = false,
+)
 
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("relance", Context.MODE_PRIVATE)
@@ -115,6 +118,27 @@ class Prefs(context: Context) {
     @Synchronized
     fun snooze(q: Question) = setSnoozed(snoozed().filter { it.key != q.key } + q)
 
+    // --- Tâches créées après un « Pas fait » : tâche → événement d'origine ---
+
+    @Synchronized
+    fun taskLinks(): Map<String, Question> {
+        val o = JSONObject(sp.getString("taskLinks", "{}")!!)
+        return o.keys().asSequence().associateWith { Question.fromJson(o.getJSONObject(it)) }
+    }
+
+    @Synchronized
+    fun setTaskLinks(links: Map<String, Question>) {
+        val o = JSONObject()
+        links.forEach { (k, q) -> o.put(k, q.toJson()) }
+        sp.edit().putString("taskLinks", o.toString()).apply()
+    }
+
+    @Synchronized
+    fun linkTask(taskId: String, q: Question) = setTaskLinks(taskLinks() + (taskId to q))
+
+    @Synchronized
+    fun unlinkTask(taskId: String) = setTaskLinks(taskLinks() - taskId)
+
     // --- Historique des réponses ---
 
     @Synchronized
@@ -123,7 +147,7 @@ class Prefs(context: Context) {
         return (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
             Answer(o.getString("key"), o.optString("title"), o.optLong("end"),
-                o.optBoolean("done"), o.optBoolean("taskCreated"))
+                o.optBoolean("done"), o.optBoolean("taskCreated"), o.optBoolean("ticked"))
         }
     }
 
@@ -133,7 +157,7 @@ class Prefs(context: Context) {
         val arr = JSONArray()
         list.forEach {
             arr.put(JSONObject().put("key", it.key).put("title", it.title).put("end", it.end)
-                .put("done", it.done).put("taskCreated", it.taskCreated))
+                .put("done", it.done).put("taskCreated", it.taskCreated).put("ticked", it.ticked))
         }
         sp.edit().putString("history", arr.toString()).apply()
     }
