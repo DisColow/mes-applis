@@ -11,8 +11,8 @@ android {
         applicationId = "fr.mesapplis.relance"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
     }
 
     // Clé de signature fixe, versionnée avec l'appli : l'empreinte SHA-1 ne change jamais,

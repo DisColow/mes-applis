@@ -83,6 +83,21 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("remindUndated", true)
         set(v) = sp.edit().putBoolean("remindUndated", v).apply()
 
+    /** Listes Google Tasks dont on veut les relances. null = toutes. */
+    var chosenLists: Set<String>?
+        get() = sp.getStringSet("chosenLists", null)
+        set(v) = sp.edit().putStringSet("chosenLists", v).apply()
+
+    /** Heure du prochain réveil programmé (affichée dans l'appli). */
+    var nextWake: Long
+        get() = sp.getLong("nextWake", 0)
+        set(v) = sp.edit().putLong("nextWake", v).apply()
+
+    /** Dernier passage effectif de la vérification en arrière-plan. */
+    var lastRun: Long
+        get() = sp.getLong("lastRun", 0)
+        set(v) = sp.edit().putLong("lastRun", v).apply()
+
     var lastCalendarCheck: Long
         get() = sp.getLong("lastCalendarCheck", 0)
         set(v) = sp.edit().putLong("lastCalendarCheck", v).apply()

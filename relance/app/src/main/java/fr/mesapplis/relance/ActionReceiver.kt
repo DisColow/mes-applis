@@ -47,6 +47,13 @@ class ActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(ctx: Context, intent: Intent) {
         Notifier.cancel(ctx, intent.getIntExtra(EXTRA_NOTIF_ID, 0))
+        handle(ctx, intent)
+        Notifier.tidyGroups(ctx)
+        if (intent.action == EVENT_SNOOZE) Scheduler.schedule(ctx)
+    }
+
+    /** Traite une réponse (depuis une notification ou depuis l'écran de l'appli). */
+    fun handle(ctx: Context, intent: Intent) {
         val action = intent.action ?: return
         val prefs = Prefs(ctx)
         when (action) {

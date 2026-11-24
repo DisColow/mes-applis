@@ -115,6 +115,33 @@ object CalendarRepo {
         return null
     }
 
+    /** Heure de fin du prochain événement qui se termine après [now] (dans les 24 h), ou null. */
+    fun nextEnd(ctx: Context, now: Long, calendarIds: Set<Long>): Long? {
+        if (!hasPermission(ctx) || calendarIds.isEmpty()) return null
+        val uri = Instances.CONTENT_URI.buildUpon().also {
+            ContentUris.appendId(it, now - 24 * 3600_000L)
+            ContentUris.appendId(it, now + 24 * 3600_000L)
+        }.build()
+        ctx.contentResolver.query(
+            uri, arrayOf(Instances.END, Instances.CALENDAR_ID),
+            "${Instances.END} > ? AND ${Instances.ALL_DAY} = 0", arrayOf(now.toString()), Instances.END,
+        )?.use { c ->
+            while (c.moveToNext()) if (c.getLong(1) in calendarIds) return c.getLong(0)
+        }
+        return null
+    }
+
+    /**
+     * Événements terminés depuis [hours] heures, auxquels on n'a pas encore répondu :
+     * affichés dans l'appli (« À faire le point »).
+     */
+    fun unanswered(ctx: Context, prefs: Prefs, hours: Int = 72): List<Question> {
+        val now = System.currentTimeMillis()
+        val answered = prefs.history().map { it.key }.toSet()
+        return endedBetween(ctx, now - hours * 3600_000L, now, watchedIds(ctx, prefs))
+            .filter { it.key !in answered }.sortedByDescending { it.end }
+    }
+
     /** Événements (hors journée entière, refusés ou annulés) terminés dans ]from, to]. */
     fun endedBetween(ctx: Context, from: Long, to: Long, calendarIds: Set<Long>): List<Question> {
         if (!hasPermission(ctx) || calendarIds.isEmpty()) return emptyList()

@@ -13,6 +13,9 @@ Appli Android qui :
    - un récapitulatif des tâches **à venir** (7 prochains jours par défaut) ;
    - quelques tâches **sans date** (3 à chaque fois, à tour de rôle), pour qu'elles te reviennent en tête.
 
+   Tu choisis **les listes Google Tasks** (tes catégories : Perso, Travail, Courses…) dont tu veux les relances,
+   en les cochant dans l'appli. Par défaut, toutes les listes sont rappelées.
+
 **Ce qui est fait est coché partout** :
 - « C'est fait » sur un événement ajoute **✅ devant son titre dans l'agenda** (seulement cette occurrence
   si l'événement se répète) et **termine dans Google Tasks** la tâche correspondante : celle créée après
@@ -43,8 +46,18 @@ l'historique de tes réponses, et les réglages : agendas surveillés, heures de
   les annulés, et par défaut les agendas en lecture seule (jours fériés, anniversaires…). Tu peux cocher/décocher
   les agendas dans l'appli.
 - **Google Tasks** : via l'API officielle, avec ton compte Google.
-- Les vérifications tournent en arrière-plan **toutes les 15 minutes** : la question peut donc arriver
-  jusqu'à ~15 min après la fin de l'événement (Android peut retarder un peu plus quand le téléphone dort).
+- **Réveils à l'heure** : l'appli programme un réveil précis au prochain moment utile (fin du prochain
+  événement, heure de relance, début de journée, question remise à plus tard), et au moins toutes les 30 min.
+  Une vérification toutes les 15 min sert en plus de filet de sécurité. Elle se reprogramme après un
+  redémarrage du téléphone.
+- **Pas de rafale** : seuls les événements terminés depuis moins de 6 h donnent une notification. Après
+  une coupure (téléphone éteint, appli endormie), les plus anciens attendent dans l'appli, section
+  **« À faire le point »**, avec les boutons *C'est fait* / *Pas fait*. Quand plusieurs questions ou
+  relances arrivent ensemble, elles sont rangées dans **un seul paquet qui ne sonne qu'une fois**.
+- Certains téléphones (Samsung, Xiaomi, Huawei…) endorment quand même les applis peu ouvertes. Dans l'appli,
+  section **« Recevoir les rappels à l'heure »**, touche **« Ne pas restreindre la batterie pour Relance »**
+  (et, si le bouton apparaît, **« Autoriser les réveils à l'heure précise »**). La même section affiche
+  la dernière vérification et le prochain réveil.
 
 ## Installation
 

@@ -16,7 +16,12 @@ import java.util.concurrent.TimeUnit
 /** Les deux vérifications de l'appli, appelées toutes les 15 min en arrière-plan ou à la demande. */
 object Checks {
 
-    private const val MAX_LOOKBACK = 2 * 24 * 3600_000L
+    /**
+     * Seuls les événements terminés depuis moins de 6 h donnent lieu à une notification :
+     * après une longue coupure (téléphone éteint, appli mise en veille), on n'envoie pas
+     * une rafale de vieilles questions. Les plus anciennes restent dans l'appli (« À faire le point »).
+     */
+    private const val RECENT = 6 * 3600_000L
 
     /** Peut-on me déranger maintenant ? null = oui, sinon la raison (affichée dans l'appli). */
     fun busyReason(ctx: Context, now: Long = System.currentTimeMillis()): String? {
@@ -52,7 +57,7 @@ object Checks {
         val from = when {
             manual -> now - manualHours * 3600_000L
             prefs.lastCalendarCheck == 0L -> now - 30 * 60_000L
-            else -> maxOf(prefs.lastCalendarCheck, now - MAX_LOOKBACK)
+            else -> maxOf(prefs.lastCalendarCheck, now - RECENT)
         }
         val waiting = prefs.snoozed().toMutableList()
         val waitingKeys = waiting.map { it.key }.toSet()
@@ -60,8 +65,8 @@ object Checks {
             .filter { it.key !in answered && it.key !in waitingKeys }
             .forEach { waiting += it.copy(askAt = it.end) }
         if (!manual) prefs.lastCalendarCheck = now
-        // Une question restée en attente plus de 3 jours n'a plus de sens.
-        waiting.removeAll { now - it.end > 3 * 24 * 3600_000L }
+        // Une question en attente depuis trop longtemps n'est plus notifiée (elle reste dans l'appli).
+        waiting.removeAll { now - maxOf(it.end, it.askAt) > 2 * RECENT }
 
         if (!manual && busyReason(ctx, now) != null) {
             prefs.setSnoozed(waiting)
@@ -70,7 +75,7 @@ object Checks {
         val (due, later) = waiting.partition { it.askAt <= now || manual }
         prefs.setSnoozed(later)
         val toAsk = due.filter { it.key !in answered }
-        toAsk.forEach { Notifier.askEvent(ctx, it) }
+        Notifier.askEvents(ctx, toAsk)
         return toAsk.size
     }
 
@@ -88,9 +93,10 @@ object Checks {
     fun remindTasks(ctx: Context): List<GTask> {
         val prefs = Prefs(ctx)
         val api = GoogleAuth.api(ctx)
-        val tasks = api.allOpenTasks()
+        val all = api.allOpenTasks()
         Notifier.cancelAuth(ctx)
-        Sync.checkLinkedTasks(ctx, api, tasks)
+        Sync.checkLinkedTasks(ctx, api, all)
+        val tasks = inChosenLists(prefs, all)
         val undated = if (prefs.remindUndated) {
             val rot = prefs.rotation
             prefs.rotation = rot + 1
@@ -101,7 +107,32 @@ object Checks {
         return tasks
     }
 
+    /** Tâches des listes choisies pour les relances. */
+    fun inChosenLists(prefs: Prefs, tasks: List<GTask>): List<GTask> {
+        val chosen = prefs.chosenLists ?: return tasks
+        return tasks.filter { it.listId in chosen }
+    }
+
+    /** Une vérification complète (événements + relance des tâches si c'est l'heure). */
+    @Synchronized
+    fun runAll(ctx: Context) {
+        val prefs = Prefs(ctx)
+        prefs.lastRun = System.currentTimeMillis()
+        if (prefs.askEvents) runCatching { checkEvents(ctx) }
+        if (prefs.remindTasks && prefs.tasksConnected && slotDue(prefs) && busyReason(ctx) == null) {
+            try {
+                remindTasks(ctx)
+            } catch (e: NeedsAuthException) {
+                Notifier.needsAuth(ctx)
+                prefs.lastSlotHandled = System.currentTimeMillis()
+            } catch (e: Exception) {
+                // Pas de réseau, etc. : on réessaiera au prochain réveil.
+            }
+        }
+    }
+
     fun schedule(ctx: Context) {
+        Scheduler.schedule(ctx)
         WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
             "relance-check", ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<CheckWorker>(15, TimeUnit.MINUTES).build(),
@@ -109,21 +140,11 @@ object Checks {
     }
 }
 
+/** Filet de sécurité toutes les 15 min, en plus des réveils précis. */
 class CheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
-        val ctx = applicationContext
-        val prefs = Prefs(ctx)
-        if (prefs.askEvents) runCatching { Checks.checkEvents(ctx) }
-        if (prefs.remindTasks && prefs.tasksConnected && Checks.slotDue(prefs) && Checks.busyReason(ctx) == null) {
-            try {
-                Checks.remindTasks(ctx)
-            } catch (e: NeedsAuthException) {
-                Notifier.needsAuth(ctx)
-                prefs.lastSlotHandled = System.currentTimeMillis()
-            } catch (e: Exception) {
-                // Pas de réseau, etc. : on réessaiera au prochain passage (dans 15 min).
-            }
-        }
+        Checks.runAll(applicationContext)
+        runCatching { Scheduler.schedule(applicationContext) }
         return Result.success()
     }
 }

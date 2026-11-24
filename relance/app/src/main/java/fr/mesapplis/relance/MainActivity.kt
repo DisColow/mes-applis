@@ -81,6 +81,13 @@ class MainActivity : Activity() {
             root.addView(button("Autoriser") { requestPermissions(missing, RC_PERMS) })
         }
 
+        // Événements terminés sans réponse
+        val pending = runCatching { CalendarRepo.unanswered(this, prefs) }.getOrDefault(emptyList())
+        if (pending.isNotEmpty()) {
+            section("À faire le point (${pending.size})")
+            pending.take(10).forEach { root.addView(eventRow(it)) }
+        }
+
         // Google Tasks
         section("Google Tasks")
         if (prefs.tasksConnected) {
@@ -120,7 +127,7 @@ class MainActivity : Activity() {
         root.addView(text("Je ne t'envoie les questions et les relances qu'en journée, et quand ton agenda " +
             "ne montre aucun événement en cours (ni qui commence dans les 5 minutes). Sinon j'attends le prochain moment libre.",
             13f, color = Color.GRAY))
-        root.addView(check("Attendre que mon agenda soit libre", prefs.waitUntilFree) { prefs.waitUntilFree = it })
+        root.addView(check("Attendre que mon agenda soit libre", prefs.waitUntilFree) { prefs.waitUntilFree = it; Scheduler.schedule(this) })
         val dayStart = EditText(this).apply {
             setText(Logic.formatTime(Logic.parseTime(prefs.dayStart, java.time.LocalTime.of(8, 0))))
             hint = "8h"
@@ -134,20 +141,37 @@ class MainActivity : Activity() {
             prefs.dayStart = Logic.formatTime(Logic.parseTime(dayStart.text.toString(), java.time.LocalTime.of(8, 0)))
             prefs.dayEnd = Logic.formatTime(Logic.parseTime(dayEnd.text.toString(), java.time.LocalTime.of(21, 0)))
             toast("Journée : ${prefs.dayStart} – ${prefs.dayEnd}")
+            Scheduler.schedule(this)
             render()
         })
+
+        // Fiabilité
+        section("Recevoir les rappels à l'heure")
+        root.addView(text("Android endort les applis peu ouvertes : les rappels arrivent alors en retard, " +
+            "puis tous d'un coup quand tu ouvres l'appli. Ces deux réglages l'en empêchent.", 13f, color = Color.GRAY))
+        if (Scheduler.canExact(this)) root.addView(text("✅ Réveils à l'heure précise autorisés", 14f))
+        else root.addView(button("Autoriser les réveils à l'heure précise") {
+            startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                android.net.Uri.parse("package:$packageName")))
+        })
+        if (Scheduler.ignoresBatteryLimits(this)) root.addView(text("✅ Pas de restriction de batterie", 14f))
+        else root.addView(button("Ne pas restreindre la batterie pour Relance") {
+            @android.annotation.SuppressLint("BatteryLife")
+            val i = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                android.net.Uri.parse("package:$packageName"))
+            runCatching { startActivity(i) }.onFailure {
+                startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+        })
+        val fmt = { t: Long -> if (t == 0L) "—" else Logic.dayTime(Instant.ofEpochMilli(t).atZone(ZoneId.systemDefault()).toLocalDateTime()) }
+        root.addView(text("Dernière vérification : ${fmt(prefs.lastRun)}\nProchain réveil : ${fmt(prefs.nextWake)}",
+            13f, color = Color.GRAY))
 
         // Réglages
         section("Après les événements")
         root.addView(check("Me demander si c'est fait à la fin de chaque événement", prefs.askEvents) { prefs.askEvents = it })
         root.addView(check("Si ce n'est pas fait, créer une tâche Google Tasks pour aujourd'hui",
             prefs.createTaskWhenNotDone) { prefs.createTaskWhenNotDone = it })
-        root.addView(button("Revoir les événements des dernières 24 h") {
-            io.execute {
-                val n = runCatching { Checks.checkEvents(this, manualHours = 24) }.getOrDefault(0)
-                main.post { toast(if (n == 0) "Rien à revoir" else "$n question${if (n > 1) "s" else ""} envoyée${if (n > 1) "s" else ""}") }
-            }
-        })
         root.addView(text("Agendas surveillés", 15f, bold = true))
         val cals = CalendarRepo.calendars(this)
         val watched = CalendarRepo.watchedIds(this, prefs)
@@ -182,6 +206,7 @@ class MainActivity : Activity() {
             prefs.horizonDays = (horizon.text.toString().toIntOrNull() ?: 7).coerceIn(1, 60)
             // Le prochain horaire compte à partir de maintenant.
             prefs.lastSlotHandled = System.currentTimeMillis()
+            Scheduler.schedule(this)
             toast("Relances à ${prefs.reminderTimes}")
             render()
         })
@@ -209,18 +234,34 @@ class MainActivity : Activity() {
         val box = tasksBox ?: return
         box.addView(text("Chargement des tâches…", 14f, color = Color.GRAY))
         io.execute {
-            val result = runCatching { GoogleAuth.api(this).allOpenTasks() }
+            val result = runCatching {
+                val api = GoogleAuth.api(this)
+                val lists = api.lists()
+                lists to lists.flatMap { (id, title) -> api.openTasks(id, title) }
+            }
             main.post { if (box == tasksBox) showTasks(box, result) }
         }
     }
 
-    private fun showTasks(box: LinearLayout, result: kotlin.Result<List<GTask>>) {
+    private fun showTasks(box: LinearLayout, result: kotlin.Result<Pair<List<Pair<String, String>>, List<GTask>>>) {
         box.removeAllViews()
-        val tasks = result.getOrElse { e ->
+        val (lists, all) = result.getOrElse { e ->
             if (e is NeedsAuthException) box.addView(button("Reconnecter Google Tasks") { connect() })
             else box.addView(text("Impossible de charger les tâches : ${e.message}", 14f, color = Color.RED))
             return
         }
+        // Choix des listes (catégories) à rappeler
+        box.addView(text("Listes à me rappeler", 15f, bold = true).apply { setPadding(0, dp(10), 0, 0) })
+        lists.forEach { (id, title) ->
+            val chosen = prefs.chosenLists
+            box.addView(check(title, chosen == null || id in chosen) { on ->
+                val cur = (prefs.chosenLists ?: lists.map { it.first }.toSet()).toMutableSet()
+                if (on) cur += id else cur -= id
+                prefs.chosenLists = cur
+                showTasks(box, result)
+            })
+        }
+        val tasks = Checks.inChosenLists(prefs, all)
         val today = LocalDate.now()
         val groups = tasks.groupBy { Logic.bucket(it.due, today, prefs.horizonDays) }
         fun group(title: String, b: Logic.Bucket, color: Int) {
@@ -236,6 +277,26 @@ class MainActivity : Activity() {
                 setOf(Logic.Bucket.OVERDUE, Logic.Bucket.TODAY, Logic.Bucket.UPCOMING) }) {
             box.addView(text("Rien en retard ni à venir. 👌", 14f))
         }
+    }
+
+    /** Un événement terminé sans réponse, avec les mêmes boutons que la notification. */
+    private fun eventRow(q: Question): View {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(6), 0, dp(6)) }
+        val ended = Logic.dayTime(Instant.ofEpochMilli(q.end).atZone(ZoneId.systemDefault()).toLocalDateTime())
+        col.addView(text(q.title, 15f))
+        col.addView(text("Terminé $ended", 12f, color = Color.GRAY))
+        fun answer(action: String) {
+            ActionReceiver().handle(this, ActionReceiver.eventIntent(action, q))
+            Notifier.cancel(this, Notifier.eventNotifId(q.key))
+            Notifier.tidyGroups(this)
+            render()
+        }
+        val notDone = if (prefs.tasksConnected && prefs.createTaskWhenNotDone) "Pas fait → tâche" else "Pas fait"
+        col.addView(row(
+            small("C'est fait") { answer(ActionReceiver.EVENT_DONE) },
+            small(notDone) { answer(ActionReceiver.EVENT_NOT_DONE) },
+        ))
+        return col
     }
 
     private fun taskRow(t: GTask, today: LocalDate): View {
