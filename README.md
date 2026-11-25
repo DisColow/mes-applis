@@ -9,6 +9,7 @@ Les applis de ce dépôt, une par dossier (et une branche par appli).
 | **Relance** | Android | Après chaque événement de l'agenda, demande si c'est fait (et coche l'événement) ; relance sur les tâches Google Tasks en retard ou à venir, uniquement en journée quand l'agenda est libre. | [Relance.apk](https://github.com/DisColow/mes-applis/releases?q=relance&expanded=true) |
 | **VoxTune** | Android | Auto-tune en temps réel : on chante dans le micro et on entend sa voix corrigée dans le casque, avec un mode Studio pour enregistrer puis réécouter corrigé. | [VoxTune.apk](https://github.com/DisColow/mes-applis/releases?q=voxtune&expanded=true) |
 | **MicBoard** | Windows | Envoie des sons (jeux, fichiers audio) dans le micro, mélangés à la voix, pour Discord, les jeux ou OBS. | [MicBoard.exe](https://github.com/DisColow/mes-applis/releases?q=micboard&expanded=true) |
+| **Cadeaux GO** | Android | Pour Pokémon GO : ouvre les cadeaux reçus et en envoie à tes amis, et transfère les Pokémon 0, 1 et 2 étoiles en gardant les spéciaux (shiny, légendaires, favoris…), en touchant l'écran à ta place. | [CadeauxGO.apk](https://github.com/DisColow/mes-applis/releases?q=cadeaux-go&expanded=true) |
 
 Chaque lien ouvre les releases de l'appli : la plus récente est en haut, le fichier est dans « Assets ».
 Les explications détaillées de chaque appli sont dans le README de son dossier, sur sa branche.
