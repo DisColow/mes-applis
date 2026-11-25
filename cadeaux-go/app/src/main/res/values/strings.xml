@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cadeaux GO</string>
+    <string name="a11y_summary">Cadeaux et transferts automatiques dans Pokémon GO</string>
+    <string name="a11y_intro">🎁 Ouvre et envoie tes cadeaux, ♻ trie tes Pokémon, sans lever le petit doigt.</string>
+    <string name="a11y_description">Cadeaux GO affiche un petit panneau flottant au-dessus de Pokémon GO. Quand tu appuies sur un de ses boutons, il regarde l\'écran, reconnaît les boutons du jeu et touche l\'écran à ta place. Rien n\'est envoyé sur Internet.</string>
+    <string name="a11y_html"><![CDATA[
+<p><b>Ce que fait Cadeaux GO</b></p>
+<ul>
+<li>▶ <b>Cadeaux</b> : ouvre les cadeaux reçus et en envoie à tes amis.</li>
+<li>♻ <b>Transfert</b> : transfère les Pokémon 0, 1 et 2 étoiles (sauf shiny, légendaires…).</li>
+</ul>
+<p><b>Pourquoi l\'accessibilité ?</b> Pour voir l\'écran (captures), toucher à ta place et taper la recherche de Pokémon. Tout reste sur ton téléphone : rien n\'est envoyé sur Internet.</p>
+]]></string>
+</resources>

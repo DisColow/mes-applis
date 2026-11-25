@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  canRetrieveWindowContent + flagRetrieveInteractiveWindows : lire et remplir le champ de
+  recherche du jeu (vrai champ Android au-dessus du clavier). intro / htmlDescription /
+  settingsActivity : page de réglages d'accessibilité plus claire (Android 13+).
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
+    android:canRetrieveWindowContent="true"
+    android:notificationTimeout="200"
+    android:description="@string/a11y_description"
+    android:summary="@string/a11y_summary"
+    android:intro="@string/a11y_intro"
+    android:htmlDescription="@string/a11y_html"
+    android:settingsActivity="com.discolow.cadeauxgo.ui.MainActivity" />

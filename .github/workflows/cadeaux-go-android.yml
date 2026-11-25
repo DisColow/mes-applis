@@ -1,0 +1,74 @@
+name: Cadeaux GO APK
+
+# Teste et compile l'APK à chaque modification de l'appli (ou à la demande depuis l'onglet Actions),
+# puis le publie en artefact et dans une release GitHub téléchargeable depuis le téléphone.
+on:
+  push:
+    paths: ["cadeaux-go/**", ".github/workflows/cadeaux-go-android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cadeaux-go-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cadeaux-go
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # historique complet, pour retrouver le dernier changement de l'appli
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      # Le SDK Android est préinstallé sur les machines ubuntu-latest (ANDROID_HOME).
+      # Tests : moteur de reconnaissance, et vraies captures du jeu (app/src/test/resources/real).
+      - name: Tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Compilation de l'APK
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Renommer l'APK
+        run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/release/app-release.apk CadeauxGO.apk
+
+      # Contenu de la release : le message du dernier commit qui a modifié l'appli, sans les signatures.
+      - name: Résumé de la release
+        run: |
+          {
+            echo "## Contenu de cette version"
+            echo
+            git log -1 --format='**%s**%n%n%b' -- . | grep -v -E '^(Co-Authored-By|Claude-Session|Signed-off-by):'
+            echo
+            echo "---"
+            echo "Ouvrez **CadeauxGO.apk** sur votre téléphone Android (11 ou plus) pour l'installer."
+            echo "Compilé depuis \`${{ github.ref_name }}\` @ ${{ github.sha }}."
+          } > ../release-notes.md
+          cat ../release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CadeauxGO-${{ env.VERSION }}-apk
+          path: cadeaux-go/CadeauxGO.apk
+
+      - name: Publier une release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cadeaux-go-v${{ env.VERSION }}-${{ github.run_number }}
+          name: Cadeaux GO ${{ env.VERSION }} (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          body_path: release-notes.md
+          files: cadeaux-go/CadeauxGO.apk
