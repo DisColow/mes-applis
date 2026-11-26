@@ -125,6 +125,10 @@ En cas de plantage, l'écran principal affiche le dernier rapport, avec un bouto
 - Les mots-clés de recherche dépendent de la langue du jeu : vérifier `favori`, `chromatique`… dans le
   jeu, et corriger la recherche personnalisée si besoin.
 - Le tri par date de capture n'est pas réglé par l'appli (le jeu le garde).
+- **Filtre d'écran** (lumière bleue, mode nuit, confort des yeux…) : il teinte les captures. Cadeaux GO
+  le détecte (le blanc de l'interface n'est plus neutre) et corrige les couleurs avant de les comparer
+  (`Tint`, testé sur une vraie vidéo teintée). Pour plus de sûreté, mieux vaut le désactiver pendant les
+  routines.
 
 ## Fonctionnement (technique)
 
@@ -142,6 +146,8 @@ pour distinguer un bouton grisé) → geste injecté (`dispatchGesture`).
   couper l'élan de la liste — aucune ligne sautée. Fin de liste = le défilement ne change plus l'écran.
 - **La croix ronde du bas** est la même sur la liste d'amis (où elle ferme la liste), le profil et les
   objets reçus : elle n'est touchée qu'après une nouvelle capture, jamais si la liste est visible.
+- **Écran teinté** : si un filtre d'écran colore les captures, la teinte est estimée à partir du blanc de
+  l'interface (calque semi-transparent : opacité et couleur) et retirée avant chaque contrôle de couleur.
 - **Saisie de la recherche** : le jeu ouvre un vrai champ Android au-dessus du clavier, rempli par
   `ACTION_SET_TEXT`, relu, puis validé (« OK »).
 

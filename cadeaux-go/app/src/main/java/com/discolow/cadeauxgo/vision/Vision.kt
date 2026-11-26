@@ -89,6 +89,84 @@ private fun meanColor(w: Int, argb: IntArray, x: Int, y: Int, rw: Int, rh: Int):
 }
 
 /**
+ * Correction d'une teinte appliquée à tout l'écran (filtre de lumière bleue, mode nuit, confort des
+ * yeux…) : ces filtres dessinent un calque coloré semi-transparent qui apparaît dans les captures et
+ * fausse les couleurs (blanc → rose, turquoise → gris…). La forme des boutons reste reconnue (la
+ * corrélation normalisée y est insensible), mais pas leur couleur.
+ *
+ * Modèle : couleur mesurée = a × couleur réelle + calque, avec un calque chaud dont la composante la
+ * plus faible est quasi nulle. Le blanc de l'interface (pixels les plus clairs) donne alors a = (canal
+ * le plus faible du blanc) / 255 et le calque = blanc − 255·a. Mesuré sur une vraie vidéo : blanc
+ * (227, 184, 176) → a = 0,69, calque (51, 8, 0) ; turquoise (80, 109, 106) corrigé en (42, 146, 153)
+ * pour (42, 146, 152) réel.
+ */
+class Tint private constructor(private val alpha: Float, private val layer: IntArray) {
+
+    override fun toString() = "Tint(a=${"%.2f".format(alpha)}, calque=${layer.toList()})"
+
+    fun correct(rgb: IntArray): IntArray = IntArray(3) { c -> ((rgb[c] - layer[c]) / alpha).toInt().coerceIn(0, 255) }
+
+    companion object {
+        /** Écart minimal entre canaux du « blanc » pour considérer l'écran comme teinté. */
+        private const val MIN_CAST = 25
+
+        /** Au-delà, le « blanc » n'est pas assombri par un calque : pas de filtre. */
+        private const val MAX_FILTERED_WHITE = 242
+
+        /** Variance maximale (par canal) des pixels les plus clairs : écart-type ≈ 12. */
+        private const val UNIFORM_VAR = 150.0
+
+        /** null si l'écran n'est pas teinté (blanc neutre ou non assombri). */
+        fun estimate(w: Int, h: Int, argb: IntArray): Tint? {
+            val n = w * h
+            if (n < 100) return null
+            // Histogramme des luminances (un pixel sur 4 suffit) → 2 % les plus clairs.
+            val hist = IntArray(256)
+            val step = 4
+            var count = 0
+            for (i in 0 until n step step) {
+                hist[lum(argb[i])]++; count++
+            }
+            val k = max(1, count / 50)
+            var hi = 255
+            var acc = 0
+            while (hi > 0 && acc + hist[hi] < k) { acc += hist[hi]; hi-- }
+            val sum = LongArray(3)
+            val sq = LongArray(3)
+            var m = 0
+            for (i in 0 until n step step) {
+                val c = argb[i]
+                if (lum(c) >= hi) {
+                    for (ch in 0..2) {
+                        val v = (c shr (16 - 8 * ch)) and 0xFF
+                        sum[ch] += v; sq[ch] += v.toLong() * v
+                    }
+                    m++
+                }
+            }
+            if (m == 0) return null
+            val white = IntArray(3) { (sum[it] / m).toInt() }
+            // Le blanc de l'interface est une couleur uniforme ; des zones claires disparates ne
+            // permettent pas d'estimer un calque.
+            for (ch in 0..2) {
+                val mean = sum[ch].toDouble() / m
+                if (sq[ch].toDouble() / m - mean * mean > UNIFORM_VAR) return null
+            }
+            // Un vrai filtre assombrit le blanc : son canal le plus fort n'atteint plus 255. Un écran dont les
+            // zones claires sont simplement colorées (dégradé bleu-vert…) garde un canal proche de 255.
+            if (white.max() >= MAX_FILTERED_WHITE) return null
+            if (white.max() - white.min() < MIN_CAST) return null
+            val alpha = white.min() / 255f
+            if (alpha < 0.3f) return null
+            return Tint(alpha, IntArray(3) { white[it] - white.min() })
+        }
+
+        private fun lum(c: Int) =
+            (0.299f * ((c shr 16) and 0xFF) + 0.587f * ((c shr 8) and 0xFF) + 0.114f * (c and 0xFF)).toInt().coerceIn(0, 255)
+    }
+}
+
+/**
  * Une capture d'écran réduite à la résolution de travail.
  * [srcW]/[srcH] = taille réelle de l'écran (pour convertir en coordonnées de toucher).
  */
@@ -102,7 +180,14 @@ class Frame(val w: Int, val h: Int, val argb: IntArray, val srcW: Int = w, val s
     fun level(k: Int): GrayImage =
         if (k <= 1) gray else synchronized(levels) { levels.getOrPut(k) { gray.downscale(k) } }
 
-    fun meanColor(x: Int, y: Int, rw: Int, rh: Int) = meanColor(w, argb, x, y, rw, rh)
+    /** Teinte de l'écran à corriger (filtre de lumière bleue…), ou null si les couleurs sont normales. */
+    val tint: Tint? by lazy { Tint.estimate(w, h, argb) }
+
+    /** Couleur moyenne d'une zone, corrigée de la teinte de l'écran s'il y en a une. */
+    fun meanColor(x: Int, y: Int, rw: Int, rh: Int): IntArray {
+        val raw = meanColor(w, argb, x, y, rw, rh)
+        return tint?.correct(raw) ?: raw
+    }
 }
 
 /** Un motif appris (bouton, icône…) à la résolution de travail. */

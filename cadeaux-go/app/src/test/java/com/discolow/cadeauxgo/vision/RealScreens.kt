@@ -39,6 +39,22 @@ object RealScreens {
     }
 
     /**
+     * Même capture vue à travers un filtre d'écran rouge semi-transparent (mesuré sur une vraie vidéo :
+     * couleur' = 0,69 × couleur + (51, 9, 3)).
+     */
+    fun frameTinted(name: String): Frame {
+        val (px, w, h) = pixels(capture(name))
+        for (i in px.indices) {
+            val c = px[i]
+            val r = (0.69f * ((c shr 16) and 0xFF) + 51).toInt().coerceIn(0, 255)
+            val g = (0.69f * ((c shr 8) and 0xFF) + 9).toInt().coerceIn(0, 255)
+            val b = (0.69f * (c and 0xFF) + 3).toInt().coerceIn(0, 255)
+            px[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        return Resize.frame(px, w, h, WORK)
+    }
+
+    /**
      * Même capture avec un rectangle sombre à l'endroit du panneau de Cadeaux GO (fractions de
      * l'écran : x0, y0, x1, y1), comme sur une vraie capture prise pendant la routine.
      */
