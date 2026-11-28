@@ -50,8 +50,11 @@ object Builtin {
         BuiltinDef("gift_bow.png", Role.GIFT_ITEM, 590),
         BuiltinDef("send_envoyer.png", Role.SEND_CONFIRM, 590, area = zone(0f, 0.6f, 1f, 1f)),
         // Transfert de Pokémon (vidéo de 590 px de large).
-        // Onglet « POKÉMON » ; clic : la barre de recherche, 130 px plus bas (vidéo de 590 px).
-        BuiltinDef("tr_page.png", Role.TR_PAGE, 590, tapX = 61, tapY = 132, colorTol = 255, area = zone(0.2f, 0f, 0.8f, 0.15f)),
+        // Onglet « POKÉMON » ; clic : la barre de recherche, ~127 px plus bas (vidéo de 590 px).
+        // Découpés au ras des lettres : la bulle de l'encoche (minuteur…) peut descendre jusqu'au-dessus.
+        BuiltinDef("tr_page.png", Role.TR_PAGE, 590, tapX = 57, tapY = 127, colorTol = 255, area = zone(0.2f, 0f, 0.8f, 0.15f)),
+        // Onglet « ŒUFS » (à droite, loin de la bulle et du panneau) : même clic sur la barre de recherche.
+        BuiltinDef("tr_page_oeufs.png", Role.TR_PAGE, 590, tapX = -146, tapY = 128, colorTol = 255, area = zone(0.6f, 0f, 1f, 0.15f)),
         BuiltinDef("tr_evolutions.png", Role.TR_LIST, 590, colorTol = 255, area = zone(0f, 0.1f, 1f, 0.35f)),
         BuiltinDef("tr_pc.png", Role.TR_CELL, 590, colorTol = 255, area = zone(0f, 0.15f, 1f, 1f)),
         BuiltinDef("tr_toutsel.png", Role.TR_SELECT, 590, area = zone(0.3f, 0f, 1f, 0.15f)),

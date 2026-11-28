@@ -12,8 +12,8 @@ android {
         // AccessibilityService.takeScreenshot() existe depuis Android 11.
         minSdk = 30
         targetSdk = 35
-        versionCode = 21
-        versionName = "3.5"
+        versionCode = 22
+        versionName = "3.5.1"
     }
 
     // Clé de signature fixe, versionnée : les mises à jour s'installent par-dessus l'ancienne version.

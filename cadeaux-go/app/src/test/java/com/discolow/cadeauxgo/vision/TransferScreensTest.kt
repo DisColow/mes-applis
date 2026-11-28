@@ -26,6 +26,8 @@ class TransferScreensTest {
     fun ecransDuTransfert() {
         // Page POKÉMON (avec ou sans recherche), pas en mode sélection ni ailleurs.
         seen(Role.TR_PAGE, "t_005", "t_014")
+        // Bulle de l'encoche (minuteur) juste au-dessus de l'onglet « POKÉMON ».
+        seen(Role.TR_PAGE, "r_001", "r_010", "r_025")
         notSeen(Role.TR_PAGE, "t_030", "t_073", *giftScreens)
         seen(Role.TR_LIST, "t_014", "t_016", "t_030", "t_040")
         // Stockage sans recherche (« Chercher » vide) : pas de ligne « AFFICHER LES ÉVOLUTIONS ».
@@ -78,15 +80,20 @@ class TransferScreensTest {
 
     @Test
     fun clicSurLaBarreDeRecherche() {
-        // Vidéo de 590 px : la barre « Chercher » va de x≈25 à 565 et de y≈165 à 220.
-        val f = RealScreens.frame("t_005")
-        val page = RealScreens.builtins.first { it.def.role == Role.TR_PAGE }
-        val m = Matcher.find(f, page.pattern, threshold, page.def.colorTol)!!
-        val s = f.srcW.toFloat() / page.def.screenW
-        val x = m.x / f.factor + page.def.tapX!! * s
-        val y = m.y / f.factor + page.def.tapY!! * s
-        assertTrue("x=$x", x in 25f..565f)
-        assertTrue("y=$y", y in 165f..220f)
+        // Vidéo de 590 px : la barre « Chercher » va de x≈25 à 565 et de y≈165 à 220. Les deux onglets
+        // (« POKÉMON » et « ŒUFS ») mènent au même endroit, avec ou sans la bulle de l'encoche.
+        for (n in listOf("t_005", "r_010")) {
+            val f = RealScreens.frame(n)
+            for (page in RealScreens.builtins.filter { it.def.role == Role.TR_PAGE }) {
+                val m = Matcher.find(f, page.pattern, threshold, page.def.colorTol)
+                org.junit.Assert.assertNotNull("${page.def.file} sur $n", m)
+                val s = f.srcW.toFloat() / page.def.screenW
+                val x = m!!.x / f.factor + page.def.tapX!! * s
+                val y = m.y / f.factor + page.def.tapY!! * s
+                assertTrue("${page.def.file} $n x=$x", x in 25f..565f)
+                assertTrue("${page.def.file} $n y=$y", y in 165f..220f)
+            }
+        }
     }
 
     private fun seenOn(f: Frame, role: Role) = RealScreens.builtins.filter { it.def.role == role }
