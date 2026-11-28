@@ -14,6 +14,11 @@ interface BotHost {
     fun swipeNextFriend(left: Boolean): Boolean
     /** Fait défiler une liste : [down] = vers la suite de la liste. */
     fun scrollList(down: Boolean, fast: Boolean): Boolean
+    /**
+     * Glisse le doigt verticalement de [fromY] à [toY] (pixels réels), puis le garde immobile avant de
+     * lâcher : la liste s'arrête où le doigt s'arrête.
+     */
+    fun drag(fromY: Float, toY: Float): Boolean
     /** Appui long (ms) en pixels réels. */
     fun longPress(x: Float, y: Float, durationMs: Long = 900): Boolean
     /** Tape un texte dans le champ de saisie ouvert, le vérifie et valide. */
@@ -104,18 +109,50 @@ class Bot(
         checkRunning()
     }
 
+    // Dernière capture : réutilisée comme point de départ de stableFrame() (une capture de moins).
+    private var last: Frame? = null
+    private var lastAt = 0L
+
     private fun capture(): Frame {
         repeat(5) {
             checkRunning()
-            host.capture()?.let { return it }
+            host.capture()?.let {
+                last = it; lastAt = System.currentTimeMillis()
+                return it
+            }
             sleep(300)
         }
         throw Abort("Capture d'écran impossible")
     }
 
+    /**
+     * Après une action : attend que l'écran réagisse (change par rapport à [before]), au plus [delay] ms.
+     * Plus rapide qu'une attente fixe quand le jeu répond vite.
+     */
+    private fun settle(before: Frame?) {
+        if (before == null) { sleep(delay); return }
+        val end = System.currentTimeMillis() + delay
+        sleep(120)
+        while (System.currentTimeMillis() < end) {
+            if (Matcher.changedFraction(before, capture()) > 0.02) return
+        }
+    }
+
+    /** Motifs utiles à chaque routine (ceux de l'autre routine ne sont pas cherchés). */
+    private val transferRoles = Role.entries.filter { it.name.startsWith("TR_") }
+    private val giftRoles = Role.entries - transferRoles.toSet()
+
+    /** Cherche en parallèle (tous les cœurs) les motifs de [roles] sur [f] : les appels suivants lisent le cache. */
+    private fun scan(f: Frame, roles: Collection<Role>) {
+        tpls.filter { it.tpl.role in roles }.parallelStream().forEach { t ->
+            Matcher.findAll(f, t.pattern, threshold, t.colorTol)
+        }
+    }
+
     /** Attend que l'écran ne bouge plus (animations, défilement), sans bloquer indéfiniment. */
     private fun stableFrame(): Frame {
-        var prev = capture()
+        // La capture prise juste avant (par settle()) sert de point de comparaison.
+        var prev = last?.takeIf { System.currentTimeMillis() - lastAt < 700 } ?: capture()
         // 4 essais max : le profil a un avatar animé qui ne s'arrête jamais de bouger.
         repeat(4) {
             sleep(poll)
@@ -213,6 +250,50 @@ class Bot(
         return notes.joinToString("\n")
     }
 
+    // ---------------------------------------------------------------- défilement
+
+    /** Rapport déplacement de la liste / déplacement du doigt, mesuré à chaque défilement. */
+    private var scrollRatio = 1f
+
+    /**
+     * Fait défiler la liste de [wanted] pixels (de travail) vers le haut d'un seul geste, pour faire
+     * sortir de l'écran tout ce qui a déjà été traité. Mesure ensuite le déplacement réel (une bande de
+     * l'ancienne capture retrouvée dans la nouvelle), recalibre le rapport doigt/liste, et remonte un
+     * peu si la liste est allée trop loin (une ligne ne doit jamais être sautée).
+     * Renvoie le déplacement mesuré, 0 si la liste n'a pas bougé (fin), null s'il est inconnu.
+     */
+    private fun scrollContent(f: Frame, wantedRaw: Int, pitch: Int): Int? {
+        // Au plus 45 % de l'écran par geste : une partie du contenu doit rester visible avant et après
+        // pour mesurer le déplacement réel (vérifié sur de vraies captures, ScrollTest).
+        val wanted = wantedRaw.coerceAtMost((f.h * 0.45f).toInt())
+        val h = f.srcH.toFloat()
+        val start = h * 0.78f
+        val travel = (wanted / f.factor / scrollRatio).coerceIn(h * 0.06f, h * 0.66f)
+        host.drag(start, start - travel)
+        val after = stableFrame()
+        if (Matcher.changedFraction(f, after) < 0.01) return 0
+        val shift = Matcher.verticalShift(f, after) ?: return null
+        if (shift > 0) {
+            val r = shift / f.factor / travel
+            scrollRatio = (0.5f * scrollRatio + 0.5f * r).coerceIn(0.4f, 1.6f)
+        }
+        val excess = shift - wanted
+        if (excess > pitch / 3) {
+            // Trop loin : des lignes ont pu passer au-dessus sans être vues → on redescend de l'excédent.
+            val back = (excess / f.factor / scrollRatio).coerceAtMost(h * 0.5f)
+            host.drag(h * 0.35f, h * 0.35f + back)
+            stableFrame()
+            return wanted
+        }
+        return shift
+    }
+
+    /** Écart médian entre des positions verticales triées (hauteur d'une ligne), ou [fallback]. */
+    private fun pitchOf(ys: List<Int>, fallback: Int): Int {
+        val gaps = ys.zipWithNext { a, b -> b - a }.filter { it > 4 }.sorted()
+        return if (gaps.isEmpty()) fallback else gaps[gaps.size / 2]
+    }
+
     // ---------------------------------------------------------------- mode liste
 
     private class Target(val x: Float, val y: Float, val workY: Int)
@@ -272,6 +353,7 @@ class Bot(
         while (true) {
             checkRunning()
             val f = stableFrame()
+            scan(f, giftRoles)
             checkPendingTap(f)
             val onProfile = present(f, Role.PROFILE)
             val onList = !onProfile && present(f, Role.LIST)
@@ -297,13 +379,18 @@ class Bot(
                     visits++
                     visited++
                     actions = 0
-                    sleep(delay)
+                    settle(f)
                     continue
                 }
+                // Défilement long : la dernière ligne analysée remonte tout en haut, les suivantes arrivent.
                 host.status("Défilement…\n${summary()}")
-                host.scrollList(down = true, fast = false)
-                sleep(delay)
-                if (Matcher.changedFraction(f, stableFrame()) < 0.01) return "fin de la liste"
+                val ys = if (of(Role.LIST_ROW).isEmpty()) emptyList() else FriendRows.analyze(
+                    boxes(f, Role.LIST_ROW).map { it.first }, emptyList(), emptyList(), f.h,
+                ).map { it.y }
+                val pitch = pitchOf(ys, (f.h * 0.15f).toInt())
+                val top = (f.h * 0.15f).toInt()
+                val wanted = if (ys.isEmpty()) (f.h * 0.3f).toInt() else maxOf(ys.last() - top + 4, pitch / 2)
+                if (scrollContent(f, wanted, pitch) == 0) return "fin de la liste"
                 skip.clear()
                 continue
             }
@@ -326,7 +413,7 @@ class Bot(
                     host.status("${label(btn)}\n${summary()}")
                     tap(btn, f)
                     actions++
-                    sleep(delay)
+                    settle(f)
                     continue
                 }
                 // Plus rien à faire sur ce profil → retour à la liste.
@@ -337,7 +424,7 @@ class Bot(
                 val close = best(f, listOf(Role.PROFILE_CLOSE))
                 if (close != null) tap(close, f) else host.back()
                 profileClosedAt = System.currentTimeMillis()
-                sleep(delay)
+                settle(f)
                 continue
             }
 
@@ -366,7 +453,7 @@ class Bot(
                 host.status("${label(hit)}\n${summary()}")
                 tap(hit, f)
                 actions++
-                sleep(delay)
+                settle(f)
                 continue
             }
             if (!seenList && System.currentTimeMillis() - start > 8000) {
@@ -417,6 +504,7 @@ class Bot(
         while (true) {
             checkRunning()
             val f = stableFrame()
+            scan(f, transferRoles)
 
             if (!searchTyped) {
                 if (present(f, Role.TR_SELECT)) {
@@ -499,7 +587,7 @@ class Bot(
                 host.status("Sélection…\n${summary()}")
                 host.longPress(first.tapX / f.factor, first.tapY / f.factor)
                 pending = listOf(first)
-                sleep(delay)
+                settle(f)
                 continue
             }
 
@@ -515,7 +603,7 @@ class Bot(
                 buttonMisses = 0
                 host.status("TRANSFÉRER ($selectedNow)…\n${summary()}")
                 tap(b, f)
-                sleep(delay)
+                settle(f)
                 continue
             }
             if (endReached) return "Fin de la liste ($transferred transférés)"
@@ -535,17 +623,24 @@ class Bot(
                 host.status("Sélection de ${todo.size} Pokémon…\n${summary()}")
                 for (c in todo) {
                     host.tap(c.tapX / f.factor, c.tapY / f.factor)
-                    sleep(250)
+                    sleep(120)
                 }
                 pending = todo
-                sleep(delay)
+                settle(f)
                 continue
             }
 
+            // Défilement long : toutes les lignes déjà vues sortent par le haut, la suivante arrive juste
+            // sous la ligne « AFFICHER LES ÉVOLUTIONS ».
             host.status("Défilement…\n${summary()}")
-            host.scrollList(down = true, fast = false)
-            sleep(delay)
-            if (Matcher.changedFraction(f, stableFrame()) < 0.01) endReached = true
+            // Une position par ligne de la grille (les « PC » d'une même ligne sont à la même hauteur).
+            val rowYs = cells.map { it.y }.sorted().fold(ArrayList<Int>()) { acc, y ->
+                if (acc.isEmpty() || y - acc.last() > 20) acc.add(y)
+                acc
+            }
+            val pitch = pitchOf(rowYs, (f.w * 213f / 590f).toInt())
+            val wanted = if (rowYs.isEmpty()) (f.h * 0.3f).toInt() else maxOf(rowYs.last() + pitch - evo - 6, pitch / 2)
+            if (scrollContent(f, wanted, pitch) == 0) endReached = true
             attempts.clear()
         }
     }

@@ -71,7 +71,7 @@ object RealScreens {
     val builtins: List<Loaded> by lazy {
         Builtin.all.map { d ->
             val (px, w, h) = pixels(File("src/main/assets/builtin/${d.file}"))
-            Loaded(d, Resize.pattern(px, w, h, d.screenW, WORK))
+            Loaded(d, Resize.pattern(px, w, h, d.screenW, WORK).apply { area = d.area })
         }
     }
 }

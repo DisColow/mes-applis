@@ -454,6 +454,15 @@ class BotService : AccessibilityService(), BotHost {
         return gesture(listOf(move to 600L, hold to 400L))
     }
 
+    override fun drag(fromY: Float, toY: Float): Boolean {
+        val x = wm.currentWindowMetrics.bounds.width() * 0.5f
+        val move = Path().apply { moveTo(x, fromY); lineTo(x, toY) }
+        val hold = Path().apply { moveTo(x, toY); lineTo(x, toY + 1f) }
+        // Vitesse modérée (~1,5 px/ms) puis doigt immobile : pas d'élan, la liste s'arrête net.
+        val ms = (abs(toY - fromY) / 1.5f).toLong().coerceIn(250L, 900L)
+        return gesture(listOf(move to ms, hold to 350L))
+    }
+
     override fun longPress(x: Float, y: Float, durationMs: Long): Boolean {
         val p = Path().apply { moveTo(x.coerceAtLeast(0f), y.coerceAtLeast(0f)) }
         return gesture(p, durationMs)

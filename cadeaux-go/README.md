@@ -142,8 +142,16 @@ pour distinguer un bouton grisé) → geste injecté (`dispatchGesture`).
   ignorées ; une ligne qui réclame encore une visite (limite atteinte…) est ignorée jusqu'au défilement.
 - **Grille de Pokémon** : cases repérées par leur « PC » ; case sélectionnée = fond plus sombre que
   l'interstice entre deux colonnes (`StorageGrid`).
-- **Défilement** : glissement court puis doigt immobile 0,4 s avant de lâcher (`continueStroke`) pour
-  couper l'élan de la liste — aucune ligne sautée. Fin de liste = le défilement ne change plus l'écran.
+- **Défilement long et mesuré** : chaque geste fait sortir par le haut tout ce qui a déjà été traité
+  (la ligne suivante arrive juste sous l'en-tête), dans la limite de 45 % de l'écran. Le doigt reste
+  immobile avant de lâcher (`continueStroke`) pour couper l'élan. Le déplacement réel est mesuré en
+  retrouvant une bande de l'ancienne capture dans la nouvelle (`verticalShift`, testé sur de vraies
+  images) : le rapport doigt/liste est recalibré à chaque geste, et si la liste est allée trop loin, le
+  bot redescend de l'excédent — aucune ligne sautée. Fin de liste = la liste ne bouge plus.
+- **Rapidité** : chaque bouton n'est cherché que dans sa zone de l'écran (3 à 4 fois moins de calcul),
+  une seule fois par capture (cache), et tous les boutons possibles sont cherchés en parallèle sur les
+  cœurs du processeur. Après une action, le bot repart dès que l'écran réagit (au plus « Attente après
+  chaque action ») et réutilise la dernière capture au lieu d'en prendre une nouvelle.
 - **La croix ronde du bas** est la même sur la liste d'amis (où elle ferme la liste), le profil et les
   objets reçus : elle n'est touchée qu'après une nouvelle capture, jamais si la liste est visible.
 - **Écran teinté** : si un filtre d'écran colore les captures, la teinte est estimée à partir du blanc de

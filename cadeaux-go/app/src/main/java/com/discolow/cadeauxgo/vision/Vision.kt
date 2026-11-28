@@ -183,6 +183,9 @@ class Frame(val w: Int, val h: Int, val argb: IntArray, val srcW: Int = w, val s
     /** Teinte de l'écran à corriger (filtre de lumière bleue…), ou null si les couleurs sont normales. */
     val tint: Tint? by lazy { Tint.estimate(w, h, argb) }
 
+    /** Résultats déjà calculés sur cette capture (un même motif n'est cherché qu'une fois). */
+    internal val cache = java.util.concurrent.ConcurrentHashMap<List<Any>, List<Match>>()
+
     /** Couleur moyenne d'une zone, corrigée de la teinte de l'écran s'il y en a une. */
     fun meanColor(x: Int, y: Int, rw: Int, rh: Int): IntArray {
         val raw = meanColor(w, argb, x, y, rw, rh)
@@ -193,6 +196,12 @@ class Frame(val w: Int, val h: Int, val argb: IntArray, val srcW: Int = w, val s
 /** Un motif appris (bouton, icône…) à la résolution de travail. */
 class Pattern(val w: Int, val h: Int, val argb: IntArray) {
     private val gray = GrayImage.fromArgb(w, h, argb)
+
+    /**
+     * Zone de l'écran où chercher le motif (fractions x0, y0, x1, y1 ; null = tout l'écran). Les boutons
+     * du jeu sont toujours au même endroit : chercher seulement là est bien plus rapide.
+     */
+    var area: FloatArray? = null
     val meanRgb: IntArray = meanColor(w, argb, 0, 0, w, h)
 
     /** Écart-type des niveaux de gris : un motif trop uniforme n'est pas reconnaissable. */
@@ -258,13 +267,17 @@ object Matcher {
      * et si la couleur moyenne est proche (écart max par canal ≤ [colorTol]).
      */
     fun find(frame: Frame, p: Pattern, threshold: Double, colorTol: Int = 40): Match? =
-        findAll(frame, p, threshold, colorTol, maxResults = 3).maxByOrNull { it.score }
+        // Même recherche (et même cache) que findAll : un motif n'est cherché qu'une fois par capture.
+        findAll(frame, p, threshold, colorTol).maxByOrNull { it.score }
 
     /**
      * Toutes les occurrences de [p] (ex. l'icône cadeau sur chaque ligne de la liste d'amis),
      * sans doublons, triées de haut en bas.
      */
-    fun findAll(frame: Frame, p: Pattern, threshold: Double, colorTol: Int = 40, maxResults: Int = 60): List<Match> {
+    fun findAll(frame: Frame, p: Pattern, threshold: Double, colorTol: Int = 40, maxResults: Int = 60): List<Match> =
+        frame.cache.getOrPut(listOf(p, threshold, colorTol, maxResults)) { search(frame, p, threshold, colorTol, maxResults) }
+
+    private fun search(frame: Frame, p: Pattern, threshold: Double, colorTol: Int, maxResults: Int): List<Match> {
         if (p.w > frame.w || p.h > frame.h || p.w < 2 || p.h < 2) return emptyList()
         val k = intArrayOf(4, 2).firstOrNull { p.w / it >= 6 && p.h / it >= 6 } ?: 1
         val fine = p.level(1)
@@ -277,8 +290,14 @@ object Matcher {
         val mw = img.w - lv.w + 1
         val mh = img.h - lv.h + 1
         if (mw <= 0 || mh <= 0) return emptyList()
-        val map = FloatArray(mw * mh)
-        for (y in 0 until mh) for (x in 0 until mw) map[y * mw + x] = ncc(img, x, y, lv).toFloat()
+        // Zone de recherche (en coordonnées de l'image réduite) : le motif doit tenir dedans.
+        val a = p.area
+        val ax0 = if (a == null) 0 else (a[0] * img.w).toInt().coerceIn(0, mw - 1)
+        val ay0 = if (a == null) 0 else (a[1] * img.h).toInt().coerceIn(0, mh - 1)
+        val ax1 = if (a == null) mw - 1 else ((a[2] * img.w).toInt() - lv.w).coerceIn(ax0, mw - 1)
+        val ay1 = if (a == null) mh - 1 else ((a[3] * img.h).toInt() - lv.h).coerceIn(ay0, mh - 1)
+        val map = FloatArray(mw * mh) { -1f }
+        for (y in ay0..ay1) for (x in ax0..ax1) map[y * mw + x] = ncc(img, x, y, lv).toFloat()
         val cands = ArrayList<IntArray>()
         for (n in 0 until maxResults) {
             var bi = -1
@@ -328,6 +347,40 @@ object Matcher {
             if (best == null || s > best.score) best = Match(x, y, s)
         }
         return best
+    }
+
+    /**
+     * Décalage vertical (en pixels de travail) du contenu entre [before] et [after] après un défilement
+     * vers le bas : une bande horizontale de [before] (entre [bandTop] et [bandTop] + [bandH], fractions
+     * de la hauteur) est retrouvée plus haut dans [after]. null si on ne la retrouve pas nettement.
+     */
+    fun verticalShift(before: Frame, after: Frame, bandTop: Float = 0.70f, bandH: Float = 0.09f, maxShift: Float = 0.7f): Int? {
+        val k = 2
+        val a = before.level(k)
+        val b = after.level(k)
+        if (a.w != b.w || a.h != b.h) return null
+        val y0 = (bandTop * a.h).toInt()
+        val bh = (bandH * a.h).toInt()
+        val x0 = a.w / 10
+        val x1 = a.w * 9 / 10
+        val maxS = min(y0, (maxShift * a.h).toInt())
+        val err = DoubleArray(maxS + 1)
+        for (s in 0..maxS) {
+            var e = 0.0
+            for (y in 0 until bh step 2) {
+                val ra = (y0 + y) * a.w
+                val rb = (y0 + y - s) * b.w
+                for (x in x0 until x1 step 2) e += abs(a.px[ra + x] - b.px[rb + x])
+            }
+            err[s] = e
+        }
+        val best = err.indices.minBy { err[it] }
+        // Deuxième meilleur décalage, loin du premier : le minimum doit être net.
+        val second = err.indices.filter { abs(it - best) > 3 }.minOfOrNull { err[it] } ?: Double.MAX_VALUE
+        val n = (bh / 2) * ((x1 - x0) / 2)
+        // Erreur moyenne faible et minimum net (sinon : zone uniforme ou contenu méconnaissable).
+        if (err[best] / n > 12 || second < err[best] * 1.3) return null
+        return best * k
     }
 
     /** Proportion de pixels (image réduite) qui ont nettement changé entre deux captures. */

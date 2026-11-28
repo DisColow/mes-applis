@@ -253,7 +253,7 @@ object TemplateStore {
         if (!withBuiltin || !portrait) return mine
         val builtin = Builtin.all.mapNotNull { d ->
             val bmp = ctx.assets.open("builtin/${d.file}").use { BitmapFactory.decodeStream(it) } ?: return@mapNotNull null
-            val p = Resize.pattern(pixels(bmp), bmp.width, bmp.height, d.screenW, workW)
+            val p = Resize.pattern(pixels(bmp), bmp.width, bmp.height, d.screenW, workW).apply { area = d.area }
             val s = screenW.toFloat() / d.screenW
             val t = Tpl(
                 "builtin:${d.file}:${d.role}", d.role, 0, 0, bmp.width, bmp.height,
